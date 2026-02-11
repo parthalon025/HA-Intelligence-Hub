@@ -28,6 +28,7 @@ import uvicorn
 from hub.core import IntelligenceHub
 from hub.api import create_api
 from modules.discovery import DiscoveryModule
+from modules.ml_engine import MLEngine
 
 
 # Global hub instance for signal handling
@@ -163,6 +164,25 @@ async def main():
         logger.info("Discovery module ready")
     except Exception as e:
         logger.error(f"Failed to initialize discovery module: {e}")
+        await shutdown_hub(hub_instance)
+        return 1
+
+    # Register and initialize ML engine
+    try:
+        logger.info("Initializing ML engine...")
+        models_dir = os.path.join(args.cache_dir, "..", "models")
+        training_data_dir = os.path.join(args.cache_dir, "..", "daily")
+
+        ml_engine = MLEngine(hub_instance, models_dir, training_data_dir)
+        hub_instance.register_module(ml_engine)
+        await ml_engine.initialize()
+
+        # Schedule periodic training (every 7 days)
+        await ml_engine.schedule_periodic_training(interval_days=7)
+
+        logger.info("ML engine ready")
+    except Exception as e:
+        logger.error(f"Failed to initialize ML engine: {e}")
         await shutdown_hub(hub_instance)
         return 1
 
