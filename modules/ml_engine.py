@@ -143,12 +143,17 @@ class MLEngine(Module):
                 except Exception as e:
                     self.logger.error(f"Failed to train model for {target}: {e}")
 
+        # Train global anomaly detector on all features
+        await self._train_anomaly_detector(training_data)
+
         self.logger.info("Model training complete")
 
         # Collect training summary from all trained models
         trained_targets = []
         accuracy_summary = {}
         for target, model_data in self.models.items():
+            if target == "anomaly_detector":
+                continue
             if "accuracy_scores" in model_data:
                 trained_targets.append(target)
                 accuracy_summary[target] = model_data["accuracy_scores"]
@@ -162,7 +167,8 @@ class MLEngine(Module):
                 "num_snapshots": len(training_data),
                 "capabilities_trained": list(capabilities.keys()),
                 "targets_trained": trained_targets,
-                "accuracy_summary": accuracy_summary
+                "accuracy_summary": accuracy_summary,
+                "has_anomaly_detector": "anomaly_detector" in self.models
             }
         )
 
@@ -307,6 +313,79 @@ class MLEngine(Module):
             f"{len(feature_names)} features, "
             f"GB MAE={gb_mae:.2f} R²={gb_r2:.3f}, "
             f"RF MAE={rf_mae:.2f} R²={rf_r2:.3f}"
+        )
+
+    async def _train_anomaly_detector(self, training_data: List[Dict[str, Any]]):
+        """Train global anomaly detector on all features.
+
+        Args:
+            training_data: List of historical snapshots
+        """
+        self.logger.info("Training anomaly detector...")
+
+        if len(training_data) < 14:
+            self.logger.warning(f"Insufficient data for anomaly detector ({len(training_data)} < 14)")
+            return
+
+        # Build feature matrix from all snapshots
+        config = self._get_feature_config()
+        X_list = []
+
+        for i, snapshot in enumerate(training_data):
+            prev_snapshot = training_data[i - 1] if i > 0 else None
+
+            # Compute rolling stats
+            rolling_stats = {}
+            if i >= 7:
+                recent = training_data[max(0, i - 7):i]
+                rolling_stats["power_mean_7d"] = sum(
+                    s.get("power", {}).get("total_watts", 0) for s in recent
+                ) / len(recent)
+                rolling_stats["lights_mean_7d"] = sum(
+                    s.get("lights", {}).get("on", 0) for s in recent
+                ) / len(recent)
+
+            features = self._extract_features(
+                snapshot,
+                config=config,
+                prev_snapshot=prev_snapshot,
+                rolling_stats=rolling_stats
+            )
+
+            if features:
+                X_list.append(list(features.values()))
+
+        if len(X_list) < 14:
+            self.logger.warning(f"Insufficient feature vectors for anomaly detector ({len(X_list)} < 14)")
+            return
+
+        X = np.array(X_list, dtype=float)
+
+        # Train IsolationForest
+        model = IsolationForest(
+            n_estimators=100,
+            contamination=0.05,  # Assume 5% of training data is anomalous
+            random_state=42
+        )
+        model.fit(X)
+
+        # Save anomaly detector
+        model_data = {
+            "model": model,
+            "trained_at": datetime.now().isoformat(),
+            "num_samples": len(X),
+            "contamination": 0.05
+        }
+
+        model_file = self.models_dir / "anomaly_detector.pkl"
+        with open(model_file, "wb") as f:
+            pickle.dump(model_data, f)
+
+        # Cache in memory
+        self.models["anomaly_detector"] = model_data
+
+        self.logger.info(
+            f"Anomaly detector trained: {len(X)} samples, contamination=0.05"
         )
 
     def _build_training_dataset(
@@ -709,8 +788,11 @@ class MLEngine(Module):
     async def generate_predictions(self) -> Dict[str, Any]:
         """Generate predictions for tomorrow using trained models.
 
+        Uses model blending (GradientBoosting 60% + RandomForest 40%) and
+        anomaly detection to generate predictions with confidence scores.
+
         Returns:
-            Dictionary of predictions by target
+            Dictionary of predictions by target with confidence and anomaly info
         """
         self.logger.info("Generating predictions...")
 
@@ -718,21 +800,212 @@ class MLEngine(Module):
             self.logger.warning("No models loaded. Train models first.")
             return {}
 
-        # Get current state from cache to use as features
-        # In real implementation, this would fetch the latest snapshot
-        # For now, return placeholder
-        predictions = {
+        # Get latest snapshot from cache or discovery data
+        snapshot = await self._get_current_snapshot()
+        if not snapshot:
+            self.logger.error("No current snapshot available for prediction")
+            return {}
+
+        # Get previous snapshot for lag features
+        prev_snapshot = await self._get_previous_snapshot()
+
+        # Compute rolling stats (last 7 snapshots)
+        rolling_stats = await self._compute_rolling_stats()
+
+        # Build feature config
+        config = self._get_feature_config()
+
+        # Extract features from current state
+        features = self._extract_features(
+            snapshot,
+            config=config,
+            prev_snapshot=prev_snapshot,
+            rolling_stats=rolling_stats
+        )
+
+        if features is None:
+            self.logger.error("Failed to extract features from snapshot")
+            return {}
+
+        # Generate predictions for each trained model
+        predictions_dict = {}
+        feature_names = self._get_feature_names(config)
+
+        # Build feature vector in correct order (same for all models)
+        feature_vector = [features.get(name, 0) for name in feature_names]
+        X = np.array([feature_vector], dtype=float)
+
+        # Detect anomalies if model exists
+        is_anomaly = False
+        anomaly_score = None
+        if "anomaly_detector" in self.models:
+            try:
+                anomaly_model = self.models["anomaly_detector"]["model"]
+                anomaly_score = float(anomaly_model.decision_function(X)[0])
+                # Negative score = anomaly (more negative = more anomalous)
+                is_anomaly = anomaly_score < 0
+                self.logger.info(f"Anomaly detection: score={anomaly_score:.3f}, is_anomaly={is_anomaly}")
+            except Exception as e:
+                self.logger.error(f"Anomaly detection failed: {e}")
+
+        for target, model_data in self.models.items():
+            # Skip anomaly detector (already processed)
+            if target == "anomaly_detector":
+                continue
+
+            try:
+                # Scale features
+                scaler = model_data["scaler"]
+                X_scaled = scaler.transform(X)
+
+                # Get predictions from both models
+                gb_model = model_data["gb_model"]
+                rf_model = model_data["rf_model"]
+
+                gb_pred = float(gb_model.predict(X_scaled)[0])
+                rf_pred = float(rf_model.predict(X_scaled)[0])
+
+                # Blend predictions: 60% GB + 40% RF
+                blended_pred = 0.6 * gb_pred + 0.4 * rf_pred
+
+                # Calculate confidence based on model agreement
+                # High agreement = high confidence
+                pred_diff = abs(gb_pred - rf_pred)
+                avg_pred = (gb_pred + rf_pred) / 2
+
+                # Confidence: 1.0 if perfect agreement, lower if they diverge
+                # Use relative difference (% of average prediction)
+                if avg_pred > 0:
+                    rel_diff = pred_diff / avg_pred
+                    confidence = max(0.0, min(1.0, 1.0 - rel_diff))
+                else:
+                    # Both predictions near zero - high confidence if both agree
+                    confidence = 1.0 if pred_diff < 0.1 else 0.5
+
+                predictions_dict[target] = {
+                    "value": round(blended_pred, 2),
+                    "gb_prediction": round(gb_pred, 2),
+                    "rf_prediction": round(rf_pred, 2),
+                    "confidence": round(confidence, 3),
+                    "is_anomaly": is_anomaly
+                }
+
+                self.logger.debug(
+                    f"Prediction for {target}: {blended_pred:.2f} "
+                    f"(GB={gb_pred:.2f}, RF={rf_pred:.2f}, conf={confidence:.3f})"
+                )
+
+            except Exception as e:
+                self.logger.error(f"Failed to predict {target}: {e}")
+                continue
+
+        # Build final result
+        result = {
             "timestamp": datetime.now().isoformat(),
-            "predictions": {},
-            "model_count": len(self.models)
+            "predictions": predictions_dict,
+            "anomaly_detected": is_anomaly,
+            "anomaly_score": round(anomaly_score, 3) if anomaly_score is not None else None,
+            "feature_count": len(feature_names),
+            "model_count": len([k for k in self.models.keys() if k != "anomaly_detector"])
         }
 
-        self.logger.info(f"Generated predictions for {len(self.models)} targets")
+        # Store in cache
+        await self.hub.set_cache(
+            "ml_predictions",
+            result,
+            category="predictions",
+            ttl_seconds=86400  # 24 hours
+        )
 
-        # Store predictions in cache
-        await self.hub.set_cache("ml_predictions", predictions)
+        self.logger.info(
+            f"Generated {len(predictions_dict)} predictions "
+            f"(anomaly_detected={is_anomaly})"
+        )
 
-        return predictions
+        return result
+
+    async def _get_current_snapshot(self) -> Optional[Dict[str, Any]]:
+        """Get latest snapshot from cache or build from discovery data.
+
+        Returns:
+            Snapshot dictionary or None if unavailable
+        """
+        # Try to get latest snapshot from cache
+        snapshot_entry = await self.hub.get_cache("latest_snapshot")
+        if snapshot_entry:
+            return snapshot_entry.get("data")
+
+        # Fall back to building from discovery data
+        discovery_entry = await self.hub.get_cache("discovery")
+        if not discovery_entry:
+            return None
+
+        # Build minimal snapshot from discovery data
+        discovery = discovery_entry.get("data", {})
+        snapshot = {
+            "date": datetime.now().isoformat(),
+            "power": discovery.get("power_monitoring", {}),
+            "lights": discovery.get("lighting", {}),
+            "occupancy": discovery.get("occupancy", {}),
+            "motion": discovery.get("motion", {}),
+            "climate": discovery.get("climate", {}),
+            "weather": {},  # Would need separate weather API call
+        }
+
+        return snapshot
+
+    async def _get_previous_snapshot(self) -> Optional[Dict[str, Any]]:
+        """Get previous snapshot for lag features.
+
+        Returns:
+            Previous snapshot or None if unavailable
+        """
+        # Look for historical snapshots in training data dir
+        snapshot_files = sorted(self.training_data_dir.glob("*.json"))
+
+        if len(snapshot_files) >= 2:
+            # Return second-to-last (most recent historical)
+            try:
+                with open(snapshot_files[-2]) as f:
+                    return json.load(f)
+            except Exception as e:
+                self.logger.warning(f"Failed to load previous snapshot: {e}")
+
+        return None
+
+    async def _compute_rolling_stats(self) -> Dict[str, float]:
+        """Compute rolling statistics from recent snapshots.
+
+        Returns:
+            Dictionary of rolling statistics
+        """
+        stats = {}
+
+        # Load last 7 snapshots for rolling calculations
+        snapshot_files = sorted(self.training_data_dir.glob("*.json"))
+        if len(snapshot_files) < 7:
+            return stats
+
+        recent_snapshots = []
+        for snapshot_file in snapshot_files[-7:]:
+            try:
+                with open(snapshot_file) as f:
+                    recent_snapshots.append(json.load(f))
+            except Exception as e:
+                self.logger.warning(f"Failed to load snapshot {snapshot_file}: {e}")
+                continue
+
+        if not recent_snapshots:
+            return stats
+
+        # Compute rolling means
+        power_values = [s.get("power", {}).get("total_watts", 0) for s in recent_snapshots]
+        lights_values = [s.get("lights", {}).get("on", 0) for s in recent_snapshots]
+
+        stats["power_mean_7d"] = sum(power_values) / len(power_values) if power_values else 0
+        stats["lights_mean_7d"] = sum(lights_values) / len(lights_values) if lights_values else 0
+
+        return stats
 
     async def on_event(self, event_type: str, data: Dict[str, Any]):
         """Handle hub events.

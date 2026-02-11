@@ -337,6 +337,206 @@ class TestMLEngine:
         # These are verified by reading the code in _train_model_for_target
         pass
 
+    @pytest.mark.asyncio
+    async def test_generate_predictions_basic(self, ml_engine, mock_hub, mock_capabilities, synthetic_snapshots):
+        """Test basic prediction generation."""
+        # Setup: train models first
+        mock_hub.get_cache.return_value = mock_capabilities
+        await ml_engine.train_models(days_history=30)
+
+        # Setup: mock snapshot retrieval
+        current_snapshot = synthetic_snapshots[-1]
+
+        async def mock_get_cache(key):
+            if key == "latest_snapshot":
+                return {"data": current_snapshot}
+            elif key == "capabilities":
+                return mock_capabilities
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        # Generate predictions
+        result = await ml_engine.generate_predictions()
+
+        # Verify structure
+        assert "timestamp" in result
+        assert "predictions" in result
+        assert "anomaly_detected" in result
+        assert "feature_count" in result
+        assert "model_count" in result
+
+        # Verify predictions were generated
+        predictions = result["predictions"]
+        assert len(predictions) > 0
+
+        # Verify each prediction has required fields
+        for target, pred in predictions.items():
+            assert "value" in pred
+            assert "gb_prediction" in pred
+            assert "rf_prediction" in pred
+            assert "confidence" in pred
+            assert "is_anomaly" in pred
+
+            # Verify confidence is between 0 and 1
+            assert 0 <= pred["confidence"] <= 1
+
+    @pytest.mark.asyncio
+    async def test_generate_predictions_blending(self, ml_engine, mock_hub, mock_capabilities, synthetic_snapshots):
+        """Test model blending logic (60% GB + 40% RF)."""
+        # Setup
+        mock_hub.get_cache.return_value = mock_capabilities
+        await ml_engine.train_models(days_history=30)
+
+        current_snapshot = synthetic_snapshots[-1]
+
+        async def mock_get_cache(key):
+            if key == "latest_snapshot":
+                return {"data": current_snapshot}
+            elif key == "capabilities":
+                return mock_capabilities
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        # Generate predictions
+        result = await ml_engine.generate_predictions()
+
+        # Verify blending formula for each prediction
+        for target, pred in result["predictions"].items():
+            gb = pred["gb_prediction"]
+            rf = pred["rf_prediction"]
+            blended = pred["value"]
+
+            # Check: blended = 0.6 * gb + 0.4 * rf
+            expected = round(0.6 * gb + 0.4 * rf, 2)
+            assert abs(blended - expected) < 0.01, f"{target}: blended={blended}, expected={expected}"
+
+    @pytest.mark.asyncio
+    async def test_generate_predictions_confidence(self, ml_engine, mock_hub, mock_capabilities, synthetic_snapshots):
+        """Test confidence calculation based on model agreement."""
+        # Setup
+        mock_hub.get_cache.return_value = mock_capabilities
+        await ml_engine.train_models(days_history=30)
+
+        current_snapshot = synthetic_snapshots[-1]
+
+        async def mock_get_cache(key):
+            if key == "latest_snapshot":
+                return {"data": current_snapshot}
+            elif key == "capabilities":
+                return mock_capabilities
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        # Generate predictions
+        result = await ml_engine.generate_predictions()
+
+        # Verify confidence logic
+        for target, pred in result["predictions"].items():
+            gb = pred["gb_prediction"]
+            rf = pred["rf_prediction"]
+            confidence = pred["confidence"]
+
+            # Calculate expected confidence
+            pred_diff = abs(gb - rf)
+            avg_pred = (gb + rf) / 2
+
+            if avg_pred > 0:
+                rel_diff = pred_diff / avg_pred
+                expected_conf = max(0.0, min(1.0, 1.0 - rel_diff))
+            else:
+                expected_conf = 1.0 if pred_diff < 0.1 else 0.5
+
+            assert abs(confidence - expected_conf) < 0.01, f"{target}: conf={confidence}, expected={expected_conf}"
+
+    @pytest.mark.asyncio
+    async def test_generate_predictions_anomaly_detection(self, ml_engine, mock_hub, mock_capabilities, synthetic_snapshots):
+        """Test anomaly detection in predictions."""
+        # Setup
+        mock_hub.get_cache.return_value = mock_capabilities
+        await ml_engine.train_models(days_history=30)
+
+        current_snapshot = synthetic_snapshots[-1]
+
+        async def mock_get_cache(key):
+            if key == "latest_snapshot":
+                return {"data": current_snapshot}
+            elif key == "capabilities":
+                return mock_capabilities
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        # Generate predictions
+        result = await ml_engine.generate_predictions()
+
+        # Verify anomaly fields
+        assert "anomaly_detected" in result
+        assert "anomaly_score" in result
+        assert isinstance(result["anomaly_detected"], bool)
+
+        # If anomaly detector exists, score should be present
+        if "anomaly_detector" in ml_engine.models:
+            assert result["anomaly_score"] is not None
+
+    @pytest.mark.asyncio
+    async def test_generate_predictions_cache_storage(self, ml_engine, mock_hub, mock_capabilities, synthetic_snapshots):
+        """Test predictions are stored in cache."""
+        # Setup
+        mock_hub.get_cache.return_value = mock_capabilities
+        await ml_engine.train_models(days_history=30)
+
+        current_snapshot = synthetic_snapshots[-1]
+
+        async def mock_get_cache(key):
+            if key == "latest_snapshot":
+                return {"data": current_snapshot}
+            elif key == "capabilities":
+                return mock_capabilities
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        # Generate predictions
+        await ml_engine.generate_predictions()
+
+        # Verify cache was updated
+        set_cache_calls = [call for call in mock_hub.set_cache.call_args_list if call[0][0] == "ml_predictions"]
+        assert len(set_cache_calls) > 0
+
+        # Verify cache structure
+        cache_data = set_cache_calls[0][0][1]
+        assert "timestamp" in cache_data
+        assert "predictions" in cache_data
+        assert "anomaly_detected" in cache_data
+
+    @pytest.mark.asyncio
+    async def test_generate_predictions_no_models(self, ml_engine, mock_hub):
+        """Test predictions when no models are trained."""
+        # Don't train any models
+        result = await ml_engine.generate_predictions()
+
+        # Should return empty dict
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_generate_predictions_no_snapshot(self, ml_engine, mock_hub, mock_capabilities, synthetic_snapshots):
+        """Test predictions when no current snapshot available."""
+        # Setup: train models
+        mock_hub.get_cache.return_value = mock_capabilities
+        await ml_engine.train_models(days_history=30)
+
+        # Setup: no snapshot available
+        mock_hub.get_cache = AsyncMock(return_value=None)
+
+        # Generate predictions
+        result = await ml_engine.generate_predictions()
+
+        # Should return empty dict
+        assert result == {}
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
