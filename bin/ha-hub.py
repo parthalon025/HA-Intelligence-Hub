@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import uvicorn
 from hub.core import IntelligenceHub
 from hub.api import create_api
+from modules.discovery import DiscoveryModule
 
 
 # Global hub instance for signal handling
@@ -137,6 +138,32 @@ async def main():
         logger.info("Hub initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize hub: {e}")
+        return 1
+
+    # Get HA credentials from environment
+    ha_url = os.environ.get("HA_URL")
+    ha_token = os.environ.get("HA_TOKEN")
+
+    if not ha_url or not ha_token:
+        logger.error("HA_URL and HA_TOKEN environment variables required")
+        logger.error("Source ~/.env before running or export them manually")
+        await shutdown_hub(hub_instance)
+        return 1
+
+    # Register and initialize discovery module
+    try:
+        logger.info("Initializing discovery module...")
+        discovery = DiscoveryModule(hub_instance, ha_url, ha_token)
+        hub_instance.register_module(discovery)
+        await discovery.initialize()
+
+        # Schedule periodic discovery (every 24 hours)
+        await discovery.schedule_periodic_discovery(interval_hours=24)
+
+        logger.info("Discovery module ready")
+    except Exception as e:
+        logger.error(f"Failed to initialize discovery module: {e}")
+        await shutdown_hub(hub_instance)
         return 1
 
     # Register signal handlers
