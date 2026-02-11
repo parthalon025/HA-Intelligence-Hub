@@ -1,4 +1,6 @@
-"""Dashboard routes for HA Intelligence Hub web UI."""
+# DEPRECATED: Replaced by SPA in dashboard/spa/ (mounted at /ui via StaticFiles in hub/api.py)
+# Kept for reference until SPA is fully validated. Safe to delete after validation.
+"""Dashboard routes for HA Intelligence Hub web UI (DEPRECATED)."""
 
 import logging
 from pathlib import Path

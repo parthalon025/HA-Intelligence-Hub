@@ -9,7 +9,6 @@ import logging
 import json
 
 from hub.core import IntelligenceHub
-from dashboard.routes import create_dashboard_router
 
 
 logger = logging.getLogger(__name__)
@@ -74,13 +73,9 @@ def create_api(hub: IntelligenceHub) -> FastAPI:
 
     hub.subscribe("cache_updated", broadcast_cache_update)
 
-    # Mount dashboard static files
-    dashboard_static = Path(__file__).parent.parent / "dashboard" / "static"
-    app.mount("/ui/static", StaticFiles(directory=str(dashboard_static)), name="dashboard_static")
-
-    # Mount dashboard router
-    dashboard_router = create_dashboard_router(hub)
-    app.include_router(dashboard_router)
+    # Mount SPA dashboard (serves index.html for all unmatched /ui/ paths)
+    spa_dist = Path(__file__).parent.parent / "dashboard" / "spa" / "dist"
+    app.mount("/ui", StaticFiles(directory=str(spa_dist), html=True), name="spa")
 
     # Health check
     @app.get("/")
