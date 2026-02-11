@@ -30,6 +30,7 @@ from hub.api import create_api
 from modules.discovery import DiscoveryModule
 from modules.ml_engine import MLEngine
 from modules.orchestrator import OrchestratorModule
+from modules.patterns import PatternRecognition
 
 
 # Global hub instance for signal handling
@@ -184,6 +185,20 @@ async def main():
         logger.info("ML engine ready")
     except Exception as e:
         logger.error(f"Failed to initialize ML engine: {e}")
+        await shutdown_hub(hub_instance)
+        return 1
+
+    # Register and initialize pattern recognition
+    try:
+        logger.info("Initializing pattern recognition...")
+        log_dir = Path(os.path.join(args.cache_dir, ".."))
+        patterns = PatternRecognition(hub_instance, log_dir)
+        hub_instance.register_module(patterns)
+        await patterns.initialize()
+
+        logger.info("Pattern recognition ready")
+    except Exception as e:
+        logger.error(f"Failed to initialize pattern recognition: {e}")
         await shutdown_hub(hub_instance)
         return 1
 
