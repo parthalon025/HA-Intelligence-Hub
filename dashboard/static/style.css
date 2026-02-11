@@ -775,6 +775,215 @@ footer {
     font-size: 0.9rem;
 }
 
+/* Discovery: Domain Breakdown Bars */
+.domain-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.domain-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.domain-bar-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    min-width: 120px;
+    text-align: right;
+    color: var(--text);
+}
+
+.domain-bar-track {
+    flex: 1;
+    height: 20px;
+    background: var(--light);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.domain-bar-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 4px;
+    min-width: 2px;
+    transition: width 0.3s ease;
+}
+
+.domain-bar-count {
+    font-weight: 600;
+    font-size: 0.85rem;
+    min-width: 40px;
+    color: var(--text-muted);
+}
+
+/* Discovery: Area Grid */
+.area-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+}
+
+.area-card {
+    padding: 0.75rem 1rem;
+    background: var(--light);
+    border-radius: 6px;
+    text-align: center;
+}
+
+.area-card .area-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.area-entity-count {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* Discovery: Entity Table */
+.entity-table-wrap {
+    overflow-x: auto;
+    margin: 0 -0.5rem;
+    padding: 0 0.5rem;
+}
+
+.entity-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.entity-table th {
+    text-align: left;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.entity-table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--light);
+    vertical-align: middle;
+}
+
+.entity-table tbody tr:hover {
+    background: var(--light);
+}
+
+.entity-cell-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.entity-cell-id {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+}
+
+/* Discovery: State & Domain Badges */
+.state-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.domain-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--secondary);
+    color: white;
+}
+
+.entity-unit {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: 0.25rem;
+}
+
+.device-name {
+    font-size: 0.85rem;
+}
+
+/* Discovery: Filter Select Dropdowns */
+.filter-select {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    background: white;
+    min-width: 140px;
+}
+
+/* Discovery: Badges & Buttons */
+.badge {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: 0.5rem;
+}
+
+.stat-warning {
+    border: 2px solid var(--warning);
+}
+
+.stat-warning .stat-value {
+    color: var(--warning);
+}
+
+.btn-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    margin-left: 0.75rem;
+}
+
+.btn-toggle:hover {
+    background: var(--light);
+}
+
+.btn-secondary {
+    padding: 0.5rem 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: var(--light);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.load-more {
+    text-align: center;
+    padding: 1rem 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .navbar {
@@ -805,5 +1014,30 @@ footer {
     .event-item {
         grid-template-columns: 1fr;
         gap: 0.5rem;
+    }
+
+    .filters {
+        flex-direction: column;
+    }
+
+    .filter-select {
+        min-width: unset;
+    }
+
+    .domain-bar-label {
+        min-width: 80px;
+        font-size: 0.75rem;
+    }
+
+    .area-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+
+    .entity-table {
+        font-size: 0.8rem;
+    }
+
+    .entity-cell-id {
+        max-width: 150px;
     }
 }

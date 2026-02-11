@@ -58,10 +58,30 @@ def create_dashboard_router(hub: IntelligenceHub) -> APIRouter:
             entities_cache = await hub.get_cache("entities")
             devices_cache = await hub.get_cache("devices")
             areas_cache = await hub.get_cache("areas")
+            capabilities_cache = await hub.get_cache("capabilities")
 
             entities = entities_cache["data"] if entities_cache else {}
             devices = devices_cache["data"] if devices_cache else {}
             areas = areas_cache["data"] if areas_cache else {}
+            capabilities = capabilities_cache["data"] if capabilities_cache else {}
+
+            # Pre-compute domain breakdown
+            domain_counts = {}
+            unavailable_count = 0
+            area_entity_counts = {}
+            for eid, edata in entities.items():
+                domain = edata.get("domain", eid.split(".")[0])
+                domain_counts[domain] = domain_counts.get(domain, 0) + 1
+                if edata.get("state") in ("unavailable", "unknown"):
+                    unavailable_count += 1
+                aid = edata.get("area_id")
+                if aid:
+                    area_entity_counts[aid] = area_entity_counts.get(aid, 0) + 1
+
+            domain_breakdown = sorted(
+                [{"domain": d, "count": c} for d, c in domain_counts.items()],
+                key=lambda x: -x["count"]
+            )
 
             return templates.TemplateResponse(
                 "discovery.html",
@@ -70,9 +90,14 @@ def create_dashboard_router(hub: IntelligenceHub) -> APIRouter:
                     "entities": entities,
                     "devices": devices,
                     "areas": areas,
+                    "capabilities": capabilities,
                     "entity_count": len(entities),
                     "device_count": len(devices),
-                    "area_count": len(areas)
+                    "area_count": len(areas),
+                    "capability_count": len(capabilities),
+                    "unavailable_count": unavailable_count,
+                    "domain_breakdown": domain_breakdown,
+                    "area_entity_counts": area_entity_counts,
                 }
             )
         except Exception as e:
