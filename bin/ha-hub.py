@@ -226,7 +226,7 @@ async def main():
         await shadow_engine.initialize()
         logger.info("Shadow engine ready")
     except Exception as e:
-        logger.warning(f"Shadow engine failed (non-fatal): {e}")
+        logger.error(f"Shadow engine failed to initialize (hub continues without it): {e}")
 
     # Register intelligence module (non-fatal — hub works without it)
     try:
