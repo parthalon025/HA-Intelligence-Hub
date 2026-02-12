@@ -32,6 +32,7 @@ from modules.orchestrator import OrchestratorModule
 from modules.patterns import PatternRecognition
 from modules.intelligence import IntelligenceModule
 from modules.activity_monitor import ActivityMonitor
+from modules.shadow_engine import ShadowEngine
 
 
 # Global hub instance for signal handling
@@ -216,6 +217,16 @@ async def main():
         logger.error(f"Failed to initialize orchestrator: {e}")
         await shutdown_hub(hub_instance)
         return 1
+
+    # Register shadow engine (non-fatal — hub works without it)
+    try:
+        logger.info("Initializing shadow engine...")
+        shadow_engine = ShadowEngine(hub_instance)
+        hub_instance.register_module(shadow_engine)
+        await shadow_engine.initialize()
+        logger.info("Shadow engine ready")
+    except Exception as e:
+        logger.warning(f"Shadow engine failed (non-fatal): {e}")
 
     # Register intelligence module (non-fatal — hub works without it)
     try:

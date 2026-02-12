@@ -266,6 +266,21 @@ class ActivityMonitor(Module):
         self._activity_buffer.append(event)
         self._recent_events.append(event)
 
+        # Emit to event bus for shadow engine (non-blocking — fire and forget)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.hub.publish("state_changed", {
+                "entity_id": entity_id,
+                "domain": domain,
+                "device_class": device_class,
+                "from": from_state,
+                "to": to_state,
+                "timestamp": event["timestamp"],
+                "friendly_name": friendly_name,
+            }))
+        except RuntimeError:
+            pass  # No running event loop (e.g. tests calling from sync context)
+
         # Update occupancy
         if domain in ("person", "device_tracker"):
             self._update_occupancy(entity_id, to_state, friendly_name)

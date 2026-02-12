@@ -1245,3 +1245,186 @@ class TestWindowCleanup:
         assert "pred-9" not in engine._window_events
         assert "pred-10" in engine._window_events
         assert "pred-109" in engine._window_events
+
+
+# ============================================================================
+# Integration: ActivityMonitor → hub.publish → ShadowEngine
+# ============================================================================
+
+
+class IntegrationHub(MockHub):
+    """MockHub with a real publish that calls subscribers (like IntelligenceHub)."""
+
+    async def publish(self, event_type: str, data: Dict[str, Any]):
+        """Notify subscribers and registered modules, matching real hub behavior."""
+        if event_type in self._subscribers:
+            for callback in self._subscribers[event_type]:
+                try:
+                    await callback(data)
+                except Exception:
+                    pass
+
+        for mod in self.modules.values():
+            try:
+                await mod.on_event(event_type, data)
+            except Exception:
+                pass
+
+
+class TestActivityMonitorIntegration:
+    """Verify that activity_monitor events reach shadow engine via hub event bus."""
+
+    @pytest.mark.asyncio
+    async def test_state_changed_flows_from_activity_monitor_to_shadow_engine(self):
+        """When activity_monitor processes a tracked event, the shadow engine
+        should receive it via hub.publish() and buffer it in _recent_events."""
+        hub = IntegrationHub()
+
+        # Create both modules on the same hub
+        shadow = ShadowEngine(hub)
+        hub.register_module(shadow)
+        await shadow.initialize()
+
+        try:
+            # Build a realistic HA state_changed event data dict
+            event_data = {
+                "entity_id": "light.kitchen",
+                "new_state": {
+                    "state": "on",
+                    "attributes": {
+                        "friendly_name": "Kitchen Light",
+                        "device_class": "",
+                    },
+                },
+                "old_state": {"state": "off"},
+            }
+
+            # Simulate what activity_monitor._handle_state_changed does:
+            # It appends to its own buffers then fires asyncio.create_task(hub.publish(...))
+            # We replicate the publish call directly since _handle_state_changed
+            # requires a fully wired ActivityMonitor with ha_url/ha_token.
+            await hub.publish("state_changed", {
+                "entity_id": "light.kitchen",
+                "domain": "light",
+                "device_class": "",
+                "from": "off",
+                "to": "on",
+                "timestamp": datetime.now().isoformat(),
+                "friendly_name": "Kitchen Light",
+            })
+
+            # Shadow engine should have buffered the event
+            assert len(shadow._recent_events) == 1
+            assert shadow._recent_events[0]["entity_id"] == "light.kitchen"
+            assert shadow._recent_events[0]["domain"] == "light"
+            assert shadow._recent_events[0]["to"] == "on"
+            assert shadow._recent_events[0]["from"] == "off"
+        finally:
+            await shadow.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_multiple_events_accumulate_in_shadow_engine(self):
+        """Multiple state_changed events should all reach shadow engine."""
+        hub = IntegrationHub()
+
+        shadow = ShadowEngine(hub)
+        hub.register_module(shadow)
+        await shadow.initialize()
+
+        try:
+            entities = [
+                ("light.kitchen", "light", "off", "on", "Kitchen Light"),
+                ("switch.hallway", "switch", "off", "on", "Hallway Switch"),
+                ("light.bedroom", "light", "on", "off", "Bedroom Light"),
+            ]
+
+            for entity_id, domain, from_s, to_s, name in entities:
+                await hub.publish("state_changed", {
+                    "entity_id": entity_id,
+                    "domain": domain,
+                    "device_class": "",
+                    "from": from_s,
+                    "to": to_s,
+                    "timestamp": datetime.now().isoformat(),
+                    "friendly_name": name,
+                })
+
+            assert len(shadow._recent_events) == 3
+            assert shadow._recent_events[0]["entity_id"] == "light.kitchen"
+            assert shadow._recent_events[1]["entity_id"] == "switch.hallway"
+            assert shadow._recent_events[2]["entity_id"] == "light.bedroom"
+        finally:
+            await shadow.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_on_event_does_not_double_count(self):
+        """Shadow engine's on_event should remain a no-op to prevent double-handling.
+
+        The IntegrationHub.publish() calls both subscribers and module.on_event().
+        Only the subscriber callback should buffer events.
+        """
+        hub = IntegrationHub()
+
+        shadow = ShadowEngine(hub)
+        hub.register_module(shadow)
+        await shadow.initialize()
+
+        try:
+            await hub.publish("state_changed", {
+                "entity_id": "light.kitchen",
+                "domain": "light",
+                "device_class": "",
+                "from": "off",
+                "to": "on",
+                "timestamp": datetime.now().isoformat(),
+                "friendly_name": "Kitchen Light",
+            })
+
+            # Should be exactly 1, not 2 (proves on_event is a no-op)
+            assert len(shadow._recent_events) == 1
+        finally:
+            await shadow.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_activity_monitor_handle_state_changed_publishes_event(self):
+        """Full integration: activity_monitor._handle_state_changed fires
+        asyncio.create_task(hub.publish(...)) which reaches shadow engine."""
+        hub = IntegrationHub()
+
+        # Create activity monitor with dummy HA credentials
+        from modules.activity_monitor import ActivityMonitor
+        activity_mon = ActivityMonitor(hub, "http://dummy:8123", "dummy_token")
+        hub.register_module(activity_mon)
+
+        shadow = ShadowEngine(hub)
+        hub.register_module(shadow)
+        await shadow.initialize()
+
+        try:
+            # Call _handle_state_changed with realistic HA WebSocket data
+            event_data = {
+                "entity_id": "light.living_room",
+                "new_state": {
+                    "state": "on",
+                    "attributes": {
+                        "friendly_name": "Living Room Light",
+                        "device_class": "",
+                    },
+                },
+                "old_state": {"state": "off"},
+            }
+
+            activity_mon._handle_state_changed(event_data)
+
+            # The publish is fire-and-forget via asyncio.create_task,
+            # so we need to yield control for the task to execute
+            await asyncio.sleep(0.05)
+
+            # Shadow engine should have received the event
+            assert len(shadow._recent_events) == 1
+            assert shadow._recent_events[0]["entity_id"] == "light.living_room"
+            assert shadow._recent_events[0]["domain"] == "light"
+            assert shadow._recent_events[0]["to"] == "on"
+            assert shadow._recent_events[0]["from"] == "off"
+        finally:
+            await shadow.shutdown()
