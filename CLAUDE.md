@@ -8,6 +8,7 @@ Adaptive intelligence platform for Home Assistant — real-time activity monitor
 **Design doc:** `~/Documents/docs/plans/2026-02-11-ha-intelligence-hub-design.md`
 **Lean roadmap:** `~/Documents/docs/plans/2026-02-11-ha-hub-lean-roadmap.md`
 **Activity monitor plan:** `~/.claude/plans/resilient-stargazing-catmull.md`
+**Shadow mode design:** `~/Documents/docs/plans/2026-02-12-ha-hub-shadow-mode-design.md`
 
 ## Running
 
@@ -31,16 +32,17 @@ curl -s http://127.0.0.1:8001/api/cache/activity_summary | /usr/bin/python3 -m j
 
 ## Architecture
 
-### Modules (6, registered in order)
+### Modules (7, registered in order)
 
 | Module | File | Purpose |
 |--------|------|---------|
 | `discovery` | `modules/discovery.py` | Scans HA (REST + WebSocket), detects capabilities, caches entities/devices/areas |
-| `ml_engine` | `modules/ml_engine.py` | Feature engineering, model training (GradientBoosting, RandomForest), periodic retraining |
+| `ml_engine` | `modules/ml_engine.py` | Feature engineering, model training (GradientBoosting, RandomForest, LightGBM), periodic retraining |
 | `pattern_recognition` | `modules/patterns.py` | Detects recurring event sequences from logbook data |
 | `orchestrator` | `modules/orchestrator.py` | Generates automation suggestions from detected patterns |
+| `shadow_engine` | `modules/shadow_engine.py` | Predict-compare-score loop: captures context on state_changed, generates predictions (next_domain, room_activation, routine_trigger), scores against reality |
 | `intelligence` | `modules/intelligence.py` | Assembles daily/intraday snapshots, baselines, predictions, ML scores into unified cache. Reads Phase 2-4 engine outputs (entity correlations, sequence anomalies, power profiles, automation suggestions). Sends Telegram digest on new insights. |
-| `activity_monitor` | `modules/activity_monitor.py` | WebSocket listener for state_changed events, 15-min windowed activity log, adaptive snapshot triggering, prediction analytics |
+| `activity_monitor` | `modules/activity_monitor.py` | WebSocket listener for state_changed events, 15-min windowed activity log, adaptive snapshot triggering, prediction analytics. Emits filtered events to hub event bus for shadow engine. |
 
 ### Hub Core
 
@@ -53,9 +55,10 @@ curl -s http://127.0.0.1:8001/api/cache/activity_summary | /usr/bin/python3 -m j
 | `bin/ha-hub.py` | Entry point — initializes hub, registers modules, starts uvicorn |
 | `bin/discover.py` | Standalone discovery CLI (also used as subprocess by hub) |
 
-### Cache Categories (8)
+### Cache Categories (8) + Shadow Tables (2)
 
-`activity_log`, `activity_summary`, `areas`, `capabilities`, `devices`, `discovery_metadata`, `entities`, `intelligence`
+**Category-based:** `activity_log`, `activity_summary`, `areas`, `capabilities`, `devices`, `discovery_metadata`, `entities`, `intelligence`
+**Shadow tables:** `predictions` (predict-compare-score records), `pipeline_state` (backtest→shadow→suggest→autonomous progression)
 
 ### Dashboard (Preact SPA)
 
@@ -99,15 +102,18 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 ## Testing
 
 ```bash
-# Run all tests (81 tests, ~0.3s)
+# Run all tests (278 tests, ~1.5min)
 .venv/bin/python -m pytest tests/ -v
 
 # Individual test files
 .venv/bin/python -m pytest tests/test_activity_monitor.py -v  # 37 tests
 .venv/bin/python -m pytest tests/test_intelligence.py -v       # 44 tests
+.venv/bin/python -m pytest tests/test_shadow_engine.py -v      # 69 tests
+.venv/bin/python -m pytest tests/test_ml_training.py -v        # 71 tests
+.venv/bin/python -m pytest tests/test_cache_shadow.py -v       # 42 tests
+.venv/bin/python -m pytest tests/test_api_shadow.py -v         # 15 tests
 .venv/bin/python -m pytest tests/test_discover.py -v
 .venv/bin/python -m pytest tests/test_patterns.py -v
-.venv/bin/python -m pytest tests/test_ml_training.py -v
 .venv/bin/python -m pytest tests/test_integration.py -v
 ```
 
@@ -137,6 +143,22 @@ Separated by design: state_changed volume would drown registry events. Each has 
 
 **Noise suppression:** unavailable↔unknown transitions, same-state-to-same-state
 
+### Shadow Mode API
+
+```bash
+# Predictions with outcomes
+curl -s http://127.0.0.1:8001/api/shadow/predictions?limit=10 | python3 -m json.tool
+
+# Accuracy metrics
+curl -s http://127.0.0.1:8001/api/shadow/accuracy | python3 -m json.tool
+
+# High-confidence disagreements (most informative wrong predictions)
+curl -s http://127.0.0.1:8001/api/shadow/disagreements | python3 -m json.tool
+
+# Pipeline stage progression
+curl -s http://127.0.0.1:8001/api/pipeline | python3 -m json.tool
+```
+
 ## Gotchas
 
 - HA WebSocket requires `auth` message with token before subscribing
@@ -150,3 +172,7 @@ Separated by design: state_changed volume would drown registry events. Each has 
 - Module registration order matters — discovery must run before ml_engine (needs capabilities cache)
 - Intelligence module reads engine JSON files (entity_correlations, sequence_anomalies, power_profiles, automation_suggestions) — returns `None` gracefully if files don't exist yet
 - Engine JSON schema changes require corresponding updates to `_read_intelligence_data()` in `modules/intelligence.py`
+- Shadow engine is non-fatal — hub starts without it if init fails (logged at ERROR)
+- Shadow predictions need 24-48h of activity data before meaningful accuracy scores
+- `hub.publish()` calls BOTH subscriber callbacks AND `module.on_event()` — shadow engine uses subscribe-only pattern with on_event as no-op to prevent double-handling
+- Activity monitor emits events via fire-and-forget `create_task()` — never blocks state processing
