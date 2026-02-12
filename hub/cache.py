@@ -398,12 +398,14 @@ class CacheManager:
     async def get_recent_predictions(
         self,
         limit: int = 50,
+        offset: int = 0,
         outcome_filter: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Get recent predictions, optionally filtered by outcome type.
 
         Args:
             limit: Maximum number of predictions to return
+            offset: Number of predictions to skip (for pagination)
             outcome_filter: Filter by outcome ('correct', 'disagreement', 'nothing', or None for all)
 
         Returns:
@@ -421,8 +423,9 @@ class CacheManager:
             query += " AND outcome = ?"
             params.append(outcome_filter)
 
-        query += " ORDER BY timestamp DESC LIMIT ?"
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         params.append(limit)
+        params.append(offset)
 
         cursor = await self._conn.execute(query, params)
         rows = await cursor.fetchall()

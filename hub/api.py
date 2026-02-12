@@ -219,6 +219,72 @@ def create_api(hub: IntelligenceHub) -> FastAPI:
             logger.error(f"Error getting module '{module_id}': {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
+    # Shadow engine endpoints
+    @app.get("/api/shadow/predictions")
+    async def get_shadow_predictions(limit: int = 50, offset: int = 0):
+        """Get recent predictions with outcomes."""
+        try:
+            predictions = await hub.cache.get_recent_predictions(limit=limit, offset=offset)
+            return {"predictions": predictions, "count": len(predictions)}
+        except Exception as e:
+            logger.error(f"Error getting shadow predictions: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/shadow/accuracy")
+    async def get_shadow_accuracy():
+        """Get shadow engine accuracy metrics."""
+        try:
+            stats = await hub.cache.get_accuracy_stats()
+            pipeline = await hub.cache.get_pipeline_state()
+
+            return {
+                "overall_accuracy": stats.get("overall_accuracy", 0),
+                "predictions_total": stats.get("total_resolved", 0),
+                "predictions_correct": stats.get("per_outcome", {}).get("correct", 0),
+                "predictions_disagreement": stats.get("per_outcome", {}).get("disagreement", 0),
+                "predictions_nothing": stats.get("per_outcome", {}).get("nothing", 0),
+                "by_type": stats.get("per_outcome", {}),
+                "daily_trend": stats.get("daily_trend", []),
+                "stage": pipeline.get("current_stage", "shadow") if pipeline else "shadow",
+            }
+        except Exception as e:
+            logger.error(f"Error getting shadow accuracy: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/shadow/disagreements")
+    async def get_shadow_disagreements(limit: int = 20):
+        """Get top disagreements sorted by confidence (most informative first)."""
+        try:
+            predictions = await hub.cache.get_recent_predictions(
+                limit=200, outcome_filter="disagreement"
+            )
+            # Sort by confidence descending (highest confidence wrong = most informative)
+            sorted_preds = sorted(
+                predictions,
+                key=lambda p: p.get("confidence", 0),
+                reverse=True
+            )[:limit]
+            return {"disagreements": sorted_preds, "count": len(sorted_preds)}
+        except Exception as e:
+            logger.error(f"Error getting shadow disagreements: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/pipeline")
+    async def get_pipeline_status():
+        """Get current pipeline stage and gate progress."""
+        try:
+            pipeline = await hub.cache.get_pipeline_state()
+            if pipeline is None:
+                return {
+                    "current_stage": "shadow",
+                    "gates": {},
+                    "message": "Pipeline state not yet initialized"
+                }
+            return pipeline
+        except Exception as e:
+            logger.error(f"Error getting pipeline status: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     # WebSocket endpoint
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
