@@ -3,7 +3,7 @@ import { Section } from './utils.jsx';
 const PHASES = ['collecting', 'baselines', 'ml-training', 'ml-active'];
 const PHASE_LABELS = ['Collecting', 'Baselines', 'ML Training', 'ML Active'];
 
-export function LearningProgress({ maturity }) {
+export function LearningProgress({ maturity, shadowStage, shadowAccuracy }) {
   if (!maturity) return null;
   const idx = PHASES.indexOf(maturity.phase);
   const pct = Math.max(((idx + 1) / PHASES.length) * 100, 10);
@@ -42,6 +42,13 @@ export function LearningProgress({ maturity }) {
 
         {maturity.next_milestone && maturity.phase !== 'ml-active' && (
           <p class="text-xs text-gray-500">Next: {maturity.next_milestone}</p>
+        )}
+
+        {shadowStage && (
+          <div class="flex items-center gap-2 text-xs text-gray-500 pt-1 border-t border-gray-100">
+            <span class="font-medium bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 capitalize">{shadowStage}</span>
+            <span>Shadow engine{shadowAccuracy != null ? ` \u2014 ${Math.round(shadowAccuracy)}% accuracy` : ''}</span>
+          </div>
         )}
       </div>
     </Section>

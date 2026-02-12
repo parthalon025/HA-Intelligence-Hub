@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/predictions', label: 'Predictions', icon: TrendingUpIcon },
   { path: '/patterns', label: 'Patterns', icon: LayersIcon },
   { path: '/automations', label: 'Automations', icon: SettingsIcon },
+  { path: '/shadow', label: 'Shadow Mode', icon: EyeIcon },
 ];
 
 // Simple inline SVG icons
@@ -62,6 +63,15 @@ function BrainIcon() {
       <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z" />
       <line x1="9" y1="21" x2="15" y2="21" />
       <line x1="10" y1="19" x2="14" y2="19" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
