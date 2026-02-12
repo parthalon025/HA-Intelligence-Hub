@@ -847,8 +847,8 @@ class MLEngine(Module):
     async def generate_predictions(self) -> Dict[str, Any]:
         """Generate predictions for tomorrow using trained models.
 
-        Uses model blending (GradientBoosting 60% + RandomForest 40%) and
-        anomaly detection to generate predictions with confidence scores.
+        Uses configurable model blending (GradientBoosting, RandomForest, LightGBM)
+        and anomaly detection to generate predictions with confidence scores.
 
         Returns:
             Dictionary of predictions by target with confidence and anomaly info
