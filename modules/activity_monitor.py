@@ -387,6 +387,282 @@ class ActivityMonitor(Module):
         return list(self._snapshot_log_today_cache)
 
     # ------------------------------------------------------------------
+    # Event sequence prediction (frequency-based next-event model)
+    # ------------------------------------------------------------------
+
+    def _event_sequence_prediction(self, windows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Predict the most likely next event domain based on recent event sequences.
+
+        Uses a simple frequency model: given the last 5 event domains, what
+        domain has historically followed that pattern most often?
+
+        Falls back to overall domain frequency if no matching sequence is found.
+        """
+        # Build a flat list of domain sequences from windowed activity log
+        all_domains: List[str] = []
+        for w in windows:
+            by_domain = w.get("by_domain", {})
+            # Expand domain counts into a sequence (order within window is approximate)
+            for domain, count in by_domain.items():
+                all_domains.extend([domain] * count)
+
+        if len(all_domains) < 6:
+            return {}
+
+        # Count what domain follows each 5-domain subsequence
+        SEQ_LEN = 5
+        sequence_followers: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        for i in range(len(all_domains) - SEQ_LEN):
+            key = "|".join(all_domains[i:i + SEQ_LEN])
+            follower = all_domains[i + SEQ_LEN]
+            sequence_followers[key][follower] += 1
+
+        # Get the current trailing sequence from the recent events ring buffer
+        recent_domains = [evt["domain"] for evt in list(self._recent_events)]
+        if len(recent_domains) < SEQ_LEN:
+            # Fall back to overall domain frequency
+            domain_freq: Dict[str, int] = defaultdict(int)
+            for d in all_domains:
+                domain_freq[d] += 1
+            if not domain_freq:
+                return {}
+            top = max(domain_freq, key=domain_freq.get)
+            total = sum(domain_freq.values())
+            return {
+                "predicted_next_domain": top,
+                "probability": round(domain_freq[top] / total, 2),
+                "method": "frequency",
+                "sample_size": total,
+            }
+
+        current_key = "|".join(recent_domains[-SEQ_LEN:])
+        followers = sequence_followers.get(current_key, {})
+
+        if followers:
+            top = max(followers, key=followers.get)
+            total = sum(followers.values())
+            return {
+                "predicted_next_domain": top,
+                "probability": round(followers[top] / total, 2),
+                "method": "sequence",
+                "sample_size": total,
+            }
+
+        # Fall back to overall frequency
+        domain_freq = defaultdict(int)
+        for d in all_domains:
+            domain_freq[d] += 1
+        top = max(domain_freq, key=domain_freq.get)
+        total = sum(domain_freq.values())
+        return {
+            "predicted_next_domain": top,
+            "probability": round(domain_freq[top] / total, 2),
+            "method": "frequency",
+            "sample_size": total,
+        }
+
+    # ------------------------------------------------------------------
+    # Activity pattern mining (frequent 3-event sequences)
+    # ------------------------------------------------------------------
+
+    def _detect_activity_patterns(self, windows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Find frequent 3-event domain sequences from rolling 24h windows.
+
+        A sequence is "frequent" if it occurs 3+ times in the last 24h.
+        Returns the top patterns sorted by count descending.
+        """
+        # Build flat event domain list with timestamps from notable_changes
+        # and domain counts
+        domain_sequence: List[str] = []
+        for w in windows:
+            by_domain = w.get("by_domain", {})
+            for domain, count in by_domain.items():
+                domain_sequence.extend([domain] * count)
+
+        if len(domain_sequence) < 3:
+            return []
+
+        # Count all 3-grams
+        trigram_counts: Dict[str, int] = defaultdict(int)
+        trigram_last_seen: Dict[str, str] = {}
+        for i in range(len(domain_sequence) - 2):
+            trigram = (domain_sequence[i], domain_sequence[i + 1], domain_sequence[i + 2])
+            key = "|".join(trigram)
+            trigram_counts[key] += 1
+
+        # Get last_seen from windows (approximate: use window time)
+        window_idx = 0
+        domain_offset = 0
+        for w in windows:
+            w_total = sum(w.get("by_domain", {}).values())
+            for i in range(domain_offset, min(domain_offset + w_total - 2, len(domain_sequence) - 2)):
+                key = "|".join([domain_sequence[i], domain_sequence[i + 1], domain_sequence[i + 2]])
+                trigram_last_seen[key] = w.get("window_start", "")[:16]  # HH:MM
+            domain_offset += w_total
+
+        # Filter to frequent (3+) and non-trivial (not all same domain)
+        MIN_COUNT = 3
+        patterns = []
+        for key, count in sorted(trigram_counts.items(), key=lambda x: x[1], reverse=True):
+            if count < MIN_COUNT:
+                continue
+            parts = key.split("|")
+            # Skip trivial: all same domain
+            if len(set(parts)) == 1:
+                continue
+            patterns.append({
+                "sequence": parts,
+                "count": count,
+                "last_seen": trigram_last_seen.get(key, ""),
+            })
+            if len(patterns) >= 10:  # cap at 10 patterns
+                break
+
+        return patterns
+
+    # ------------------------------------------------------------------
+    # Occupancy arrival prediction (day-of-week historical)
+    # ------------------------------------------------------------------
+
+    def _predict_next_arrival(self, windows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Predict when someone will arrive home based on historical occupancy transitions.
+
+        Looks at the last 7 days of windows for transitions from away (occupancy=False)
+        to home (occupancy=True), grouped by day of week. Averages the first arrival
+        time for the current day of week.
+        """
+        now = datetime.now()
+        current_dow = now.strftime("%A")
+
+        # Only predict if nobody is currently home
+        if self._occupancy_state:
+            return {
+                "status": "home",
+                "message": "Someone is already home",
+            }
+
+        # Find occupancy transitions (away → home) in windows
+        # Group by day of week
+        arrivals_by_dow: Dict[str, List[str]] = defaultdict(list)
+
+        for i in range(1, len(windows)):
+            prev = windows[i - 1]
+            curr = windows[i]
+            if not prev.get("occupancy") and curr.get("occupancy"):
+                # Transition: away → home
+                ws = curr.get("window_start", "")
+                if not ws:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(ws)
+                    dow = dt.strftime("%A")
+                    time_str = dt.strftime("%H:%M")
+                    arrivals_by_dow[dow].append(time_str)
+                except (ValueError, TypeError):
+                    continue
+
+        arrivals_today = arrivals_by_dow.get(current_dow, [])
+        if not arrivals_today:
+            # Fall back to all-day average
+            all_arrivals = []
+            for times in arrivals_by_dow.values():
+                all_arrivals.extend(times)
+            if not all_arrivals:
+                return {}
+            arrivals_today = all_arrivals
+
+        # Compute average arrival time
+        total_minutes = 0
+        for t in arrivals_today:
+            parts = t.split(":")
+            total_minutes += int(parts[0]) * 60 + int(parts[1])
+        avg_minutes = total_minutes // len(arrivals_today)
+        avg_hour = avg_minutes // 60
+        avg_min = avg_minutes % 60
+        predicted_time = f"{avg_hour:02d}:{avg_min:02d}"
+
+        # Only predict if the predicted time is in the future
+        now_minutes = now.hour * 60 + now.minute
+        if avg_minutes <= now_minutes:
+            return {
+                "status": "past_predicted",
+                "message": f"Typical arrival ({predicted_time}) has passed",
+                "predicted_arrival": predicted_time,
+                "based_on": len(arrivals_today),
+            }
+
+        confidence = "low"
+        if len(arrivals_today) >= 5:
+            confidence = "high"
+        elif len(arrivals_today) >= 3:
+            confidence = "medium"
+
+        return {
+            "status": "predicted",
+            "predicted_arrival": predicted_time,
+            "confidence": confidence,
+            "based_on": len(arrivals_today),
+            "day_of_week": current_dow,
+        }
+
+    # ------------------------------------------------------------------
+    # Activity anomaly detection (event rate vs historical average)
+    # ------------------------------------------------------------------
+
+    def _detect_activity_anomalies(self, windows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Compare current hour's event rate to historical average for this hour.
+
+        Flags:
+        - "unusual_activity" if current rate > 2x the average
+        - "unusual_quiet" if 0 events when average > 10
+        """
+        now = datetime.now()
+        current_hour = now.hour
+
+        # Group windows by hour of day
+        hourly_counts: Dict[int, List[int]] = defaultdict(list)
+        for w in windows:
+            ws = w.get("window_start", "")
+            if not ws:
+                continue
+            try:
+                dt = datetime.fromisoformat(ws)
+                hourly_counts[dt.hour].append(w.get("event_count", 0))
+            except (ValueError, TypeError):
+                continue
+
+        anomalies = []
+
+        # Get counts for current hour
+        current_hour_counts = hourly_counts.get(current_hour, [])
+        if not current_hour_counts:
+            return anomalies
+
+        avg = sum(current_hour_counts) / len(current_hour_counts)
+
+        # Current rate: events in buffer right now (within the current window)
+        current_rate = len(self._activity_buffer)
+
+        if current_rate > avg * 2 and avg > 0 and current_rate > 5:
+            multiplier = round(current_rate / avg, 1)
+            anomalies.append({
+                "type": "unusual_activity",
+                "message": f"{multiplier}x normal events this hour ({current_rate} vs avg {round(avg, 1)})",
+                "severity": "info",
+                "hour": current_hour,
+            })
+
+        if current_rate == 0 and avg > 10:
+            anomalies.append({
+                "type": "unusual_quiet",
+                "message": f"No events this period, but average is {round(avg, 1)} for this hour",
+                "severity": "info",
+                "hour": current_hour,
+            })
+
+        return anomalies
+
+    # ------------------------------------------------------------------
     # Buffer flush — 15-minute windows → cache
     # ------------------------------------------------------------------
 
@@ -521,6 +797,12 @@ class ActivityMonitor(Module):
             elapsed = (now - self._last_snapshot_time).total_seconds()
             cooldown_remaining = max(0, SNAPSHOT_COOLDOWN_S - elapsed)
 
+        # Compute intelligence enhancements from windowed history
+        event_predictions = self._event_sequence_prediction(windows)
+        patterns = self._detect_activity_patterns(windows)
+        occupancy_prediction = self._predict_next_arrival(windows)
+        anomalies = self._detect_activity_anomalies(windows)
+
         summary = {
             "occupancy": {
                 "anyone_home": self._occupancy_state,
@@ -549,6 +831,10 @@ class ActivityMonitor(Module):
                 "disconnect_count": self._ws_disconnect_count,
                 "total_disconnect_s": round(self._ws_total_disconnect_s, 1),
             },
+            "event_predictions": event_predictions,
+            "patterns": patterns,
+            "occupancy_prediction": occupancy_prediction,
+            "anomalies": anomalies,
         }
 
         await self.hub.set_cache(CACHE_ACTIVITY_SUMMARY, summary, {
