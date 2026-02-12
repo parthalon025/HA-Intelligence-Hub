@@ -39,7 +39,7 @@ curl -s http://127.0.0.1:8001/api/cache/activity_summary | /usr/bin/python3 -m j
 | `ml_engine` | `modules/ml_engine.py` | Feature engineering, model training (GradientBoosting, RandomForest), periodic retraining |
 | `pattern_recognition` | `modules/patterns.py` | Detects recurring event sequences from logbook data |
 | `orchestrator` | `modules/orchestrator.py` | Generates automation suggestions from detected patterns |
-| `intelligence` | `modules/intelligence.py` | Assembles daily/intraday snapshots, baselines, predictions, ML scores into unified cache. Sends Telegram digest on new insights. |
+| `intelligence` | `modules/intelligence.py` | Assembles daily/intraday snapshots, baselines, predictions, ML scores into unified cache. Reads Phase 2-4 engine outputs (entity correlations, sequence anomalies, power profiles, automation suggestions). Sends Telegram digest on new insights. |
 | `activity_monitor` | `modules/activity_monitor.py` | WebSocket listener for state_changed events, 15-min windowed activity log, adaptive snapshot triggering, prediction analytics |
 
 ### Hub Core
@@ -148,3 +148,5 @@ Separated by design: state_changed volume would drown registry events. Each has 
 - `snapshot_log.jsonl` is append-only, never pruned — grows ~1KB/snapshot
 - Snapshot subprocess (`ha-intelligence --snapshot-intraday`) uses `asyncio.get_running_loop().run_in_executor` — don't call from sync context
 - Module registration order matters — discovery must run before ml_engine (needs capabilities cache)
+- Intelligence module reads engine JSON files (entity_correlations, sequence_anomalies, power_profiles, automation_suggestions) — returns `None` gracefully if files don't exist yet
+- Engine JSON schema changes require corresponding updates to `_read_intelligence_data()` in `modules/intelligence.py`
