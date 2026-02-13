@@ -41,6 +41,7 @@ htmlcov/
 *.db
 *.sqlite
 *.log
+*.jsonl
 .env
 
 # Dashboard build
