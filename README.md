@@ -34,7 +34,7 @@ git clone https://github.com/parthalon025/ha-aria.git
 cd ha-aria
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[all]"
+pip install -e ".[dev,llm,ml-extra,prophet]"
 ```
 
 ### Configure
@@ -42,8 +42,8 @@ pip install -e ".[all]"
 Set your Home Assistant connection:
 
 ```bash
-export ARIA_HA_URL="http://your-ha-instance:8123"
-export ARIA_HA_TOKEN="your-long-lived-access-token"
+export HA_URL="http://your-ha-instance:8123"
+export HA_TOKEN="your-long-lived-access-token"
 ```
 
 ### Run

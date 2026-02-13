@@ -64,7 +64,7 @@ npx esbuild src/index.jsx --bundle --outfile=dist/bundle.js \
 ## Code Style
 
 - **Python**: Enforced by [ruff](https://docs.astral.sh/ruff/) (PEP 8 + import sorting)
-- **Line length**: 100 characters
+- **Line length**: 120 characters
 - **Type hints**: Encouraged for public APIs
 - **Docstrings**: Required for public functions and classes
 

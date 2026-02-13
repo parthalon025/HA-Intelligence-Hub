@@ -189,7 +189,7 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 
 # Test suites by area
 .venv/bin/python -m pytest tests/hub/ -v         # Hub tests (396 tests)
-.venv/bin/python -m pytest tests/engine/ -v       # Engine tests (171 tests)
+.venv/bin/python -m pytest tests/engine/ -v       # Engine tests (177 tests)
 .venv/bin/python -m pytest tests/integration/ -v  # Integration tests (5 tests)
 
 # Individual hub test files
@@ -216,6 +216,13 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 .venv/bin/python -m pytest tests/engine/test_cli.py -v
 .venv/bin/python -m pytest tests/engine/test_storage.py -v
 .venv/bin/python -m pytest tests/engine/test_llm.py -v
+.venv/bin/python -m pytest tests/engine/test_automation_suggestions.py -v
+.venv/bin/python -m pytest tests/engine/test_drift.py -v
+.venv/bin/python -m pytest tests/engine/test_entity_correlations.py -v
+.venv/bin/python -m pytest tests/engine/test_occupancy.py -v
+.venv/bin/python -m pytest tests/engine/test_power_profiles.py -v
+.venv/bin/python -m pytest tests/engine/test_prophet.py -v
+.venv/bin/python -m pytest tests/engine/test_sequence_anomalies.py -v
 ```
 
 ## Environment

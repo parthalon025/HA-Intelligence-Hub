@@ -18,6 +18,7 @@ aria/
     cache.py        SQLite-backed category cache (hub.db)
     api.py          FastAPI routes + WebSocket for dashboard
     constants.py    Shared cache key constants
+    config_defaults.py  Default config parameter seeding
 
   modules/          Hub runtime modules (registered in order)
     discovery.py    HA entity/device/area scanning
@@ -25,6 +26,7 @@ aria/
     patterns.py     Recurring event sequence detection
     orchestrator.py Automation suggestion generation
     shadow_engine.py Predict-compare-score validation loop
+    data_quality.py Entity classification pipeline (auto-exclude, edge, include)
     intelligence.py Unified intelligence assembly
     activity_monitor.py WebSocket state_changed listener
 

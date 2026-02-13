@@ -20,4 +20,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Power consumption profiling
 - LLM-powered insights via Ollama
 - CI/CD with GitHub Actions
-- 572 tests (171 engine + 396 hub + 5 integration)
+- 578 tests (177 engine + 396 hub + 5 integration)
