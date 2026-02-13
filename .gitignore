@@ -37,6 +37,9 @@ htmlcov/
 *.swp
 *.swo
 
+# Linting
+.ruff_cache/
+
 # Cache & data
 *.db
 *.sqlite
