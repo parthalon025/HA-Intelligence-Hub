@@ -432,8 +432,10 @@ class TestMLEngine:
             assert abs(sum(weights.values()) - 1.0) < 0.01
 
             # Verify blended = sum(weight_i * pred_i)
+            # Tolerance 0.02: both blended and expected are independently rounded
+            # to 2dp, which can introduce up to 0.01 rounding disagreement.
             expected = round(weights["gb"] * gb + weights["rf"] * rf + weights["lgbm"] * lgbm, 2)
-            assert abs(blended - expected) < 0.01, f"{target}: blended={blended}, expected={expected}"
+            assert abs(blended - expected) < 0.02, f"{target}: blended={blended}, expected={expected}"
 
     @pytest.mark.asyncio
     async def test_generate_predictions_confidence(self, ml_engine, mock_hub, mock_capabilities, synthetic_snapshots):

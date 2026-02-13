@@ -1,42 +1,152 @@
 """Tests for Pattern Recognition module."""
 
+import json
 import pytest
-import pytest_asyncio
 from pathlib import Path
-from aria.hub.core import IntelligenceHub
+from typing import Any, Dict, Optional
+from unittest.mock import patch, MagicMock
+
 from aria.modules.patterns import PatternRecognition
 
 
-@pytest_asyncio.fixture
-async def hub():
-    """Create test hub instance."""
-    cache_path = "/tmp/test_patterns_hub.db"
-    Path(cache_path).unlink(missing_ok=True)
-
-    hub = IntelligenceHub(cache_path)
-    await hub.initialize()
-
-    yield hub
-
-    await hub.shutdown()
-    Path(cache_path).unlink(missing_ok=True)
+# ============================================================================
+# Mock Hub
+# ============================================================================
 
 
-@pytest_asyncio.fixture
-async def patterns_module(hub):
-    """Create pattern recognition module."""
-    log_dir = Path.home() / "ha-logs"
+class MockHub:
+    """Lightweight hub mock — avoids SQLite, matching test_intelligence.py pattern."""
 
+    def __init__(self):
+        self._cache: Dict[str, Dict[str, Any]] = {}
+        self.modules = {}
+
+    async def set_cache(self, category: str, data: Any, metadata: Optional[Dict] = None):
+        self._cache[category] = {"data": data, "metadata": metadata}
+
+    async def get_cache(self, category: str) -> Optional[Dict[str, Any]]:
+        return self._cache.get(category)
+
+    def register_module(self, module):
+        self.modules[module.module_id] = module
+
+    async def publish(self, event_type: str, data: Dict[str, Any]):
+        pass
+
+
+# ============================================================================
+# Fixture data — 7 days × 3 areas → produces 3 clusters (≥2 patterns)
+# ============================================================================
+
+# Light-on times per area per day (minutes since midnight, ±1 min variation)
+_MORNING_TIMES = [389, 390, 391, 389, 390, 391, 390]   # ~06:29-06:31
+_MIDDAY_TIMES = [734, 735, 736, 734, 735, 736, 735]     # ~12:14-12:16
+_EVENING_TIMES = [1259, 1260, 1261, 1259, 1260, 1261, 1260]  # ~20:59-21:01
+
+
+def _mock_ollama_generate(**kwargs):
+    """Return a deterministic label based on area mentioned in the prompt."""
+    prompt = kwargs.get("prompt", "")
+    if "bedroom" in prompt.lower():
+        label = "Morning routine"
+    elif "kitchen" in prompt.lower():
+        label = "Lunch prep"
+    elif "living" in prompt.lower():
+        label = "Evening wind-down"
+    else:
+        label = "Daily activity"
+    response = MagicMock()
+    response.response = label
+    return response
+
+
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def hub():
+    return MockHub()
+
+
+@pytest.fixture
+def log_dir(tmp_path):
+    """Create logbook directory with 7 days of data across 3 areas."""
+    for day_idx in range(7):
+        date_str = f"2026-02-{day_idx + 1:02d}"
+        events = []
+
+        # Bedroom — morning light + motion
+        m = _MORNING_TIMES[day_idx]
+        h, mn = divmod(m, 60)
+        events.append({
+            "entity_id": "light.bedroom_main",
+            "name": "Bedroom Light",
+            "state": "on",
+            "when": f"{date_str}T{h:02d}:{mn:02d}:00",
+        })
+        events.append({
+            "entity_id": "binary_sensor.bedroom_motion",
+            "name": "Bedroom Motion",
+            "state": "on",
+            "when": f"{date_str}T{h:02d}:{max(0, mn - 2):02d}:00",
+        })
+
+        # Kitchen — midday light + motion
+        m = _MIDDAY_TIMES[day_idx]
+        h, mn = divmod(m, 60)
+        events.append({
+            "entity_id": "light.kitchen_main",
+            "name": "Kitchen Light",
+            "state": "on",
+            "when": f"{date_str}T{h:02d}:{mn:02d}:00",
+        })
+        events.append({
+            "entity_id": "binary_sensor.kitchen_motion",
+            "name": "Kitchen Motion",
+            "state": "on",
+            "when": f"{date_str}T{h:02d}:{max(0, mn - 1):02d}:00",
+        })
+
+        # Living room — evening light + motion
+        m = _EVENING_TIMES[day_idx]
+        h, mn = divmod(m, 60)
+        events.append({
+            "entity_id": "light.living_room_main",
+            "name": "Living Room Light",
+            "state": "on",
+            "when": f"{date_str}T{h:02d}:{mn:02d}:00",
+        })
+        events.append({
+            "entity_id": "binary_sensor.living_room_motion",
+            "name": "Living Room Motion",
+            "state": "on",
+            "when": f"{date_str}T{h:02d}:{max(0, mn - 3):02d}:00",
+        })
+
+        (tmp_path / f"{date_str}.json").write_text(json.dumps(events))
+
+    return tmp_path
+
+
+@pytest.fixture
+def patterns_module(hub, log_dir):
+    """Create pattern recognition module with mock hub and fixture data."""
     module = PatternRecognition(
         hub=hub,
         log_dir=log_dir,
         min_pattern_frequency=1,
         min_support=0.3,
-        min_confidence=0.3
+        min_confidence=0.3,
     )
-
     hub.register_module(module)
     return module
+
+
+# ============================================================================
+# Tests
+# ============================================================================
 
 
 @pytest.mark.asyncio
@@ -49,9 +159,9 @@ async def test_module_registration(hub, patterns_module):
 @pytest.mark.asyncio
 async def test_pattern_detection(hub, patterns_module):
     """Test that patterns are detected from historical data."""
-    await patterns_module.initialize()
+    with patch("aria.modules.patterns.ollama.generate", side_effect=_mock_ollama_generate):
+        await patterns_module.initialize()
 
-    # Check cache
     cache_data = await hub.get_cache("patterns")
     assert cache_data is not None
     assert "data" in cache_data
@@ -61,14 +171,14 @@ async def test_pattern_detection(hub, patterns_module):
     assert "pattern_count" in patterns_data
     assert "areas_analyzed" in patterns_data
 
-    # Should detect at least 2 patterns (acceptance criteria: ≥3, but we have limited data)
     assert patterns_data["pattern_count"] >= 2
 
 
 @pytest.mark.asyncio
 async def test_pattern_structure(hub, patterns_module):
     """Test that detected patterns have required fields."""
-    await patterns_module.initialize()
+    with patch("aria.modules.patterns.ollama.generate", side_effect=_mock_ollama_generate):
+        await patterns_module.initialize()
 
     cache_data = await hub.get_cache("patterns")
     patterns = cache_data["data"]["patterns"]
@@ -101,7 +211,8 @@ async def test_pattern_structure(hub, patterns_module):
 @pytest.mark.asyncio
 async def test_llm_interpretation(hub, patterns_module):
     """Test that LLM generates semantic descriptions."""
-    await patterns_module.initialize()
+    with patch("aria.modules.patterns.ollama.generate", side_effect=_mock_ollama_generate):
+        await patterns_module.initialize()
 
     cache_data = await hub.get_cache("patterns")
     patterns = cache_data["data"]["patterns"]
@@ -118,12 +229,10 @@ async def test_llm_interpretation(hub, patterns_module):
 @pytest.mark.asyncio
 async def test_dtw_distance():
     """Test DTW distance calculation."""
-    from aria.modules.patterns import PatternRecognition
-
     module = PatternRecognition(
         hub=None,
         log_dir=Path("/tmp"),
-        min_pattern_frequency=1
+        min_pattern_frequency=1,
     )
 
     # Identical sequences
@@ -147,12 +256,10 @@ async def test_dtw_distance():
 @pytest.mark.asyncio
 async def test_extract_area_from_name():
     """Test area extraction from entity names."""
-    from aria.modules.patterns import PatternRecognition
-
     module = PatternRecognition(
         hub=None,
         log_dir=Path("/tmp"),
-        min_pattern_frequency=1
+        min_pattern_frequency=1,
     )
 
     assert module._extract_area_from_name("Bedroom Light", "light.bedroom_main") == "bedroom"
@@ -163,12 +270,10 @@ async def test_extract_area_from_name():
 @pytest.mark.asyncio
 async def test_strip_think_tags():
     """Test removal of deepseek-r1 thinking tags."""
-    from aria.modules.patterns import PatternRecognition
-
     module = PatternRecognition(
         hub=None,
         log_dir=Path("/tmp"),
-        min_pattern_frequency=1
+        min_pattern_frequency=1,
     )
 
     text = "<think>Some reasoning here</think>Morning routine"
