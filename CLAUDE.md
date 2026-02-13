@@ -59,11 +59,12 @@ curl -s http://127.0.0.1:8001/api/cache/activity_summary | /usr/bin/python3 -m j
 
 **Category-based:** `activity_log`, `activity_summary`, `areas`, `capabilities`, `devices`, `discovery_metadata`, `entities`, `intelligence`
 **Shadow tables:** `predictions` (predict-compare-score records), `pipeline_state` (backtest→shadow→suggest→autonomous progression)
+**Phase 2 tables:** `config` (editable engine parameters), `entity_curation` (tiered entity classification), `config_history` (change audit log)
 
 ### Dashboard (Preact SPA)
 
 **Stack:** Preact + Tailwind CSS, bundled with esbuild
-**Pages:** Home, Discovery, Capabilities, Intelligence, Patterns, Predictions, Automations
+**Pages:** Home, Discovery, Capabilities, Intelligence, Patterns, Predictions, Automations, Shadow Mode, Settings, Data Curation
 
 ```bash
 # Rebuild SPA after JSX changes
@@ -85,7 +86,7 @@ cd dashboard/spa && npx esbuild src/index.jsx --bundle --outfile=dist/bundle.js 
 | `DailyInsight` | LLM-generated daily insight text |
 | `Correlations` | Cross-metric correlation matrix |
 | `SystemStatus` | Run log, ML model scores (R2/MAE), meta-learning applied suggestions |
-| `Configuration` | Current intelligence engine config |
+| `Configuration` | Current intelligence engine config (deprecated — replaced by Settings page) |
 | `utils.jsx` | Shared helpers: Section, Callout, durationSince, describeEvent, EVENT_ICONS, DOMAIN_LABELS |
 
 ### Activity Monitor — Prediction Analytics
@@ -102,16 +103,16 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 ## Testing
 
 ```bash
-# Run all tests (278 tests, ~1.5min)
+# Run all tests (~201 tests, ~12s)
 .venv/bin/python -m pytest tests/ -v
 
 # Individual test files
-.venv/bin/python -m pytest tests/test_activity_monitor.py -v  # 37 tests
+.venv/bin/python -m pytest tests/test_activity_monitor.py -v  # 42 tests
 .venv/bin/python -m pytest tests/test_intelligence.py -v       # 44 tests
 .venv/bin/python -m pytest tests/test_shadow_engine.py -v      # 69 tests
 .venv/bin/python -m pytest tests/test_ml_training.py -v        # 71 tests
 .venv/bin/python -m pytest tests/test_cache_shadow.py -v       # 42 tests
-.venv/bin/python -m pytest tests/test_api_shadow.py -v         # 15 tests
+.venv/bin/python -m pytest tests/test_api_shadow.py -v         # 20 tests
 .venv/bin/python -m pytest tests/test_discover.py -v
 .venv/bin/python -m pytest tests/test_patterns.py -v
 .venv/bin/python -m pytest tests/test_integration.py -v
@@ -135,8 +136,11 @@ The hub maintains **two separate WebSocket connections** to HA:
 
 Separated by design: state_changed volume would drown registry events. Each has independent backoff (5s→60s max).
 
-## Domain Filtering (Activity Monitor)
+## Entity Filtering (Activity Monitor)
 
+**Phase 2 curation layer:** Entity-level include/exclude from `entity_curation` SQLite table. Loaded on startup, reloaded dynamically via `curation_updated` event bus. Falls back to domain filtering when curation table is empty (first boot).
+
+**Domain fallback (used when curation not loaded):**
 **Tracked:** light, switch, binary_sensor, lock, media_player, cover, climate, vacuum, person, device_tracker, fan
 **Conditional:** sensor (only if device_class == "power")
 **Excluded:** update, tts, stt, scene, button, number, select, input_*, counter, script, zone, sun, weather, conversation, event, automation, camera, image, remote
@@ -157,6 +161,20 @@ curl -s http://127.0.0.1:8001/api/shadow/disagreements | python3 -m json.tool
 
 # Pipeline stage progression
 curl -s http://127.0.0.1:8001/api/pipeline | python3 -m json.tool
+
+# Pipeline control (advance/retreat with gate validation)
+curl -s -X POST http://127.0.0.1:8001/api/pipeline/advance -H 'Content-Type: application/json' -d '{}'
+curl -s -X POST http://127.0.0.1:8001/api/pipeline/retreat -H 'Content-Type: application/json' -d '{}'
+```
+
+### Phase 2 Config & Curation API
+
+```bash
+# All config parameters with metadata
+curl -s http://127.0.0.1:8001/api/config | python3 -m json.tool
+
+# Entity curation summary (tier/status counts)
+curl -s http://127.0.0.1:8001/api/curation/summary | python3 -m json.tool
 ```
 
 ## Gotchas
