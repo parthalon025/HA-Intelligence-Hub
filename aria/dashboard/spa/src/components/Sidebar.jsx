@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import { wsConnected, wsMessage } from '../store.js';
+import { wsConnected, wsMessage, theme, toggleTheme } from '../store.js';
 import AriaLogo from './AriaLogo.jsx';
 
 const NAV_ITEMS = [
@@ -114,6 +114,26 @@ function FilterIcon() {
   );
 }
 
+function SunIcon() {
+  return (
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
+
 function getHashPath() {
   const hash = window.location.hash || '#/';
   const path = hash.replace(/^#/, '') || '/';
@@ -134,15 +154,19 @@ export default function Sidebar() {
 
   const connected = wsConnected.value;
   const statusText = wsMessage.value;
+  const isDark = theme.value === 'dark';
 
   return (
     <>
       {/* Desktop sidebar */}
-      <nav class="hidden md:flex fixed left-0 top-0 bottom-0 w-60 bg-gray-900 flex-col z-30">
+      <nav
+        class="hidden md:flex fixed left-0 top-0 bottom-0 w-60 flex-col z-30"
+        style="background: var(--bg-surface); border-right: 1px solid var(--border-subtle);"
+      >
         {/* Brand */}
         <div class="px-5 py-5">
-          <AriaLogo className="w-28" color="#22d3ee" />
-          <p class="text-[10px] text-gray-500 mt-1.5 tracking-wide">Adaptive Residence Intelligence</p>
+          <AriaLogo className="w-28" color="var(--accent)" />
+          <p style="font-size: 10px; color: var(--text-tertiary); margin-top: 6px; letter-spacing: 0.05em;">Adaptive Residence Intelligence</p>
         </div>
 
         {/* Nav links */}
@@ -150,7 +174,10 @@ export default function Sidebar() {
           {NAV_ITEMS.map((item, i) => {
             if (item.section) {
               return (
-                <div key={item.section} class={`px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600 ${i > 0 ? 'border-t border-gray-800 mt-2' : ''}`}>
+                <div
+                  key={item.section}
+                  style={`padding: 0 12px; padding-top: 16px; padding-bottom: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary);${i > 0 ? ' border-top: 1px solid var(--border-subtle); margin-top: 8px;' : ''}`}
+                >
                   {item.section}
                 </div>
               );
@@ -160,11 +187,13 @@ export default function Sidebar() {
               <a
                 key={item.path}
                 href={`#${item.path}`}
-                class={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
-                }`}
+                class="flex items-center gap-3 text-sm font-medium"
+                style={active
+                  ? 'background: var(--bg-surface-raised); color: var(--text-primary); border-left: 2px solid var(--accent); padding: 8px 12px; border-radius: var(--radius); transition: background 0.15s ease, color 0.15s ease;'
+                  : 'color: var(--text-tertiary); padding: 8px 12px; border-left: 2px solid transparent; border-radius: var(--radius); transition: background 0.15s ease, color 0.15s ease;'
+                }
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--bg-surface-raised)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+                onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)'; } }}
               >
                 <item.icon />
                 {item.label}
@@ -173,15 +202,17 @@ export default function Sidebar() {
           })}
         </div>
 
-        {/* Footer: Guide link + About + WS status */}
-        <div class="px-3 py-3 border-t border-gray-800 space-y-2">
+        {/* Footer: Guide link + Theme toggle + About + WS status */}
+        <div style="padding: 12px; border-top: 1px solid var(--border-subtle);" class="space-y-2">
           <a
             href="#/guide"
-            class={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              currentPath === '/guide'
-                ? 'bg-gray-800 text-white'
-                : 'text-cyan-400 hover:bg-gray-800 hover:text-cyan-300'
-            }`}
+            class="flex items-center gap-3 text-sm font-medium"
+            style={currentPath === '/guide'
+              ? 'background: var(--bg-surface-raised); color: var(--text-primary); border-left: 2px solid var(--accent); padding: 8px 12px; border-radius: var(--radius);'
+              : 'color: var(--accent); padding: 8px 12px; border-left: 2px solid transparent; border-radius: var(--radius); transition: background 0.15s ease, color 0.15s ease;'
+            }
+            onMouseEnter={(e) => { if (currentPath !== '/guide') { e.currentTarget.style.background = 'var(--bg-surface-raised)'; } }}
+            onMouseLeave={(e) => { if (currentPath !== '/guide') { e.currentTarget.style.background = 'transparent'; } }}
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
@@ -189,15 +220,23 @@ export default function Sidebar() {
             </svg>
             How to Use ARIA
           </a>
-          <div class="px-3 text-[10px] text-gray-600 leading-relaxed">
-            <p class="font-semibold text-gray-500">ARIA v1.0.0</p>
-            <p class="mt-0.5">Local ML + real-time monitoring for Home Assistant. No cloud required.</p>
+          <div style="padding: 0 12px; font-size: 10px; color: var(--text-tertiary); line-height: 1.6;">
+            <p style="font-weight: 600; color: var(--text-secondary);">ARIA v1.0.0</p>
+            <p style="margin-top: 2px;">Local ML + real-time monitoring for Home Assistant. No cloud required.</p>
           </div>
-          <div class="flex items-center gap-2 px-3 text-xs text-gray-500">
+          <button
+            onClick={toggleTheme}
+            style="background: var(--bg-surface-raised); color: var(--text-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 4px 8px; margin: 0 12px; display: flex; align-items: center; gap: 6px; font-size: 0.75rem; cursor: pointer; transition: border-color 0.2s ease;"
+            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}
+          >
+            {isDark ? <SunIcon /> : <MoonIcon />}
+            <span>{isDark ? 'Light' : 'Dark'}</span>
+          </button>
+          <div class="flex items-center gap-2" style="padding: 0 12px; font-size: 0.75rem; color: var(--text-tertiary);">
             <span
-              class={`inline-block w-2 h-2 rounded-full ${
-                connected ? 'bg-green-500' : 'bg-red-500'
-              }`}
+              style={`display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${connected ? 'var(--status-healthy)' : 'var(--status-error)'};`}
             />
             <span class="truncate">{statusText || (connected ? 'Connected' : 'Disconnected')}</span>
           </div>
@@ -205,7 +244,10 @@ export default function Sidebar() {
       </nav>
 
       {/* Mobile bottom tab bar */}
-      <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 z-30">
+      <nav
+        class="md:hidden fixed bottom-0 left-0 right-0 z-30"
+        style="background: var(--bg-surface); border-top: 1px solid var(--border-subtle);"
+      >
         <div class="flex justify-around items-center h-14">
           {NAV_ITEMS.filter((item) => !item.section).map((item) => {
             const active = currentPath === item.path;
@@ -213,9 +255,8 @@ export default function Sidebar() {
               <a
                 key={item.path}
                 href={`#${item.path}`}
-                class={`flex flex-col items-center justify-center p-1 ${
-                  active ? 'text-white' : 'text-gray-500'
-                }`}
+                class="flex flex-col items-center justify-center p-1"
+                style={active ? 'color: var(--accent);' : 'color: var(--text-tertiary);'}
                 title={item.label}
               >
                 <item.icon />
