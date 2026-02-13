@@ -70,9 +70,9 @@ export default function DataTable({
   const hasLast = page < totalPages - 1;
 
   return (
-    <div class="bg-white rounded-md shadow-sm overflow-hidden">
+    <div class="t-card" style="overflow: hidden;">
       {/* Toolbar: search + filters */}
-      <div class="px-4 py-3 border-b border-gray-100">
+      <div class="px-4 py-3" style="border-bottom: 1px solid var(--border-subtle);">
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">
           {/* Search input */}
           <div class="relative flex-1 max-w-sm">
@@ -81,11 +81,11 @@ export default function DataTable({
               value={searchTerm}
               onInput={(e) => setSearchTerm(e.target.value)}
               placeholder={searchPlaceholder}
-              class="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              class="t-input w-full px-3 py-1.5 text-sm"
             />
             {/* Results count badge */}
             {searchTerm && (
-              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style="color: var(--text-tertiary);">
                 {filteredData.length} / {safeData.length}
               </span>
             )}
@@ -100,13 +100,14 @@ export default function DataTable({
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
-            <tr class="bg-gray-50">
+            <tr style="background: var(--bg-surface-raised);">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  class={`px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                    col.sortable ? 'cursor-pointer select-none hover:text-gray-700' : ''
+                  class={`px-4 py-2 text-left ${
+                    col.sortable ? 'cursor-pointer select-none' : ''
                   } ${col.className || ''}`}
+                  style="color: var(--text-tertiary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500;"
                   onClick={col.sortable ? () => handleSort(col.key) : undefined}
                 >
                   <span class="inline-flex items-center gap-1">
@@ -120,15 +121,15 @@ export default function DataTable({
           <tbody>
             {pageData.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} class="px-4 py-12 text-center text-gray-400 text-sm">
+                <td colSpan={columns.length} class="px-4 py-12 text-center text-sm" style="color: var(--text-tertiary);">
                   {safeData.length === 0 ? 'No data available' : 'No results match your filters'}
                 </td>
               </tr>
             ) : (
               pageData.map((row, idx) => (
-                <tr key={row.id || row.entity_id || idx} class="hover:bg-gray-50 border-b border-gray-100">
+                <tr key={row.id || row.entity_id || idx} style="border-bottom: 1px solid var(--border-subtle);">
                   {columns.map((col) => (
-                    <td key={col.key} class={`px-4 py-2 text-sm text-gray-700 ${col.className || ''}`}>
+                    <td key={col.key} class={`px-4 py-2 text-sm ${col.className || ''}`} style="color: var(--text-secondary);">
                       {col.render ? col.render(row[col.key], row) : (row[col.key] != null ? row[col.key] : '\u2014')}
                     </td>
                   ))}
@@ -141,22 +142,24 @@ export default function DataTable({
 
       {/* Pagination footer */}
       {total > 0 && (
-        <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-          <span class="text-sm text-gray-500">
+        <div class="px-4 py-3 flex items-center justify-between" style="border-top: 1px solid var(--border-subtle);">
+          <span class="text-sm" style="color: var(--text-tertiary);">
             Showing {startIndex}\u2013{endIndex} of {total}
           </span>
           <div class="flex gap-2">
             <button
               onClick={prevPage}
               disabled={!hasFirst}
-              class="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              style="color: var(--text-secondary); background: var(--bg-surface-raised); border: 1px solid var(--border-primary); border-radius: var(--radius);"
             >
               Previous
             </button>
             <button
               onClick={nextPage}
               disabled={!hasLast}
-              class="px-3 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              style="color: var(--text-secondary); background: var(--bg-surface-raised); border: 1px solid var(--border-primary); border-radius: var(--radius);"
             >
               Next
             </button>
@@ -173,7 +176,7 @@ export default function DataTable({
 function SortIndicator({ active, direction }) {
   if (!active) {
     return (
-      <svg class="w-3 h-3 text-gray-300" viewBox="0 0 12 12" fill="currentColor">
+      <svg class="w-3 h-3" style="color: var(--text-tertiary);" viewBox="0 0 12 12" fill="currentColor">
         <path d="M6 2l3 4H3z" />
         <path d="M6 10l-3-4h6z" />
       </svg>
@@ -182,14 +185,14 @@ function SortIndicator({ active, direction }) {
 
   if (direction === 'asc') {
     return (
-      <svg class="w-3 h-3 text-gray-700" viewBox="0 0 12 12" fill="currentColor">
+      <svg class="w-3 h-3" style="color: var(--text-primary);" viewBox="0 0 12 12" fill="currentColor">
         <path d="M6 2l3 4H3z" />
       </svg>
     );
   }
 
   return (
-    <svg class="w-3 h-3 text-gray-700" viewBox="0 0 12 12" fill="currentColor">
+    <svg class="w-3 h-3" style="color: var(--text-primary);" viewBox="0 0 12 12" fill="currentColor">
       <path d="M6 10l-3-4h6z" />
     </svg>
   );

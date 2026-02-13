@@ -1,5 +1,5 @@
 /**
- * Horizontal bar chart for domain breakdown, pure CSS via Tailwind.
+ * Horizontal bar chart for domain breakdown, pure CSS with theme tokens.
  *
  * @param {{ data: Array<{ domain: string, count: number }>, total: number }} props
  */
@@ -16,16 +16,16 @@ export default function DomainChart({ data, total }) {
 
         return (
           <div key={item.domain} class="flex items-center gap-2">
-            <span class="w-28 text-sm text-gray-600 text-right truncate" title={item.domain}>
+            <span class="w-28 text-sm text-right truncate" style="color: var(--text-secondary);" title={item.domain}>
               {item.domain}
             </span>
-            <div class="flex-1 h-6 bg-gray-100 rounded overflow-hidden">
+            <div class="flex-1 h-6 overflow-hidden" style="background: var(--bg-inset); border-radius: var(--radius);">
               <div
-                class="h-full bg-blue-500 rounded transition-all"
-                style={{ width: `${barWidth}%` }}
+                class="h-full transition-all"
+                style={`background: var(--accent); border-radius: var(--radius); width: ${barWidth}%;`}
               />
             </div>
-            <span class="w-20 text-sm text-gray-500 tabular-nums">
+            <span class="w-20 text-sm data-mono" style="color: var(--text-tertiary);">
               {item.count} ({pct}%)
             </span>
           </div>

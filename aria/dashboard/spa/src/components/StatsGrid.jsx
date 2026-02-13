@@ -10,18 +10,16 @@ export default function StatsGrid({ items }) {
       {items.map((item, i) => (
         <div
           key={i}
-          class={`bg-white rounded-md shadow-sm p-4 ${
-            item.warning ? 'border-2 border-amber-500' : ''
-          }`}
+          class="t-card"
+          style={`padding: 16px;${item.warning ? ' border-color: var(--status-warning); border-width: 2px;' : ''}`}
         >
           <div
-            class={`text-2xl font-bold ${
-              item.warning ? 'text-amber-500' : 'text-blue-500'
-            }`}
+            class="data-mono"
+            style={`font-size: 1.5rem; font-weight: 700; color: ${item.warning ? 'var(--status-warning)' : 'var(--accent)'};`}
           >
             {item.value}
           </div>
-          <div class="text-sm text-gray-500 mt-1">{item.label}</div>
+          <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-top: 4px;">{item.label}</div>
         </div>
       ))}
     </div>
