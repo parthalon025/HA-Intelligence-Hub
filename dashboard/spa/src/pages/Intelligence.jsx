@@ -14,7 +14,6 @@ import { Baselines } from './intelligence/Baselines.jsx';
 import { DailyInsight } from './intelligence/DailyInsight.jsx';
 import { Correlations } from './intelligence/Correlations.jsx';
 import { SystemStatus } from './intelligence/SystemStatus.jsx';
-import { Configuration } from './intelligence/Configuration.jsx';
 
 function ShadowBrief({ shadowAccuracy, pipeline }) {
   if (!shadowAccuracy && !pipeline) return null;
@@ -42,6 +41,32 @@ function ShadowBrief({ shadowAccuracy, pipeline }) {
           </div>
           <a href="#/shadow" class="text-sm text-blue-600 hover:text-blue-800 font-medium">Full details &rarr;</a>
         </div>
+        {/* Gate progress toward next stage */}
+        {pipeline && (() => {
+          const stg = pipeline.current_stage || 'backtest';
+          // Gate thresholds — must stay in sync with PIPELINE_GATES in hub/api.py
+          const gates = {
+            backtest: { field: 'backtest_accuracy', threshold: 0.40, label: 'backtest accuracy' },
+            shadow: { field: 'shadow_accuracy_7d', threshold: 0.50, label: '7-day shadow accuracy' },
+            suggest: { field: 'suggest_approval_rate_14d', threshold: 0.70, label: '14-day approval rate' },
+          };
+          const gate = gates[stg];
+          if (!gate) return null; // autonomous = no next gate
+          const current = pipeline[gate.field] ?? 0;
+          const pct = Math.min(100, Math.round((current / gate.threshold) * 100));
+          const met = current >= gate.threshold;
+          return (
+            <div class="mt-3 pt-3 border-t border-gray-100">
+              <div class="flex items-center justify-between text-xs mb-1">
+                <span class="text-gray-500">Gate: {gate.label} &ge; {Math.round(gate.threshold * 100)}%</span>
+                <span class={met ? 'text-green-600 font-medium' : 'text-gray-500'}>{Math.round(current * 100)}%</span>
+              </div>
+              <div class="h-1.5 bg-gray-100 rounded-full">
+                <div class={`h-1.5 rounded-full ${met ? 'bg-green-500' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </Section>
   );
@@ -103,7 +128,12 @@ export default function Intelligence() {
       <DailyInsight insight={intel.daily_insight} />
       <Correlations correlations={intel.correlations} />
       <SystemStatus runLog={intel.run_log} mlModels={intel.ml_models} metaLearning={intel.meta_learning} />
-      <Configuration config={intel.config} />
+      <Section title="Configuration" subtitle="Engine parameters are now managed in Settings.">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 flex items-center justify-between">
+          <span>Engine settings have moved to the dedicated Settings page.</span>
+          <a href="#/settings" class="text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap">Settings &rarr;</a>
+        </div>
+      </Section>
     </div>
   );
 }
