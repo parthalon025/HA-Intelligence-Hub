@@ -142,20 +142,8 @@ def train_continuous_model(metric_name, feature_names, X, y, model_dir, config=N
     return model.train(metric_name, feature_names, X, y, model_dir, config)
 
 
-def blend_predictions(stat_pred, ml_pred, days_of_data):
-    """Blend statistical and ML predictions based on data maturity."""
-    if days_of_data < 14 or ml_pred is None:
-        return stat_pred
-
-    if days_of_data < 60:
-        ml_weight = 0.3
-    elif days_of_data < 90:
-        ml_weight = 0.5
-    else:
-        ml_weight = 0.7
-
-    stat_weight = 1.0 - ml_weight
-    return round(stat_pred * stat_weight + ml_pred * ml_weight, 1)
+# Canonical home: aria.engine.predictions.predictor
+from aria.engine.predictions.predictor import blend_predictions  # noqa: F401
 
 
 def count_days_of_data(store_or_paths=None):

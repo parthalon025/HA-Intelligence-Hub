@@ -13,6 +13,29 @@ except ImportError:
     HAS_SKLEARN = False
 
 
+def detect_contextual_anomalies(snapshot_features, model_dir):
+    """Score a snapshot for multi-dimensional anomalies using IsolationForest."""
+    if not HAS_SKLEARN:
+        return {"is_anomaly": False, "anomaly_score": 0}
+
+    model_path = os.path.join(model_dir, "anomaly_detector.pkl")
+    if not os.path.isfile(model_path):
+        return {"is_anomaly": False, "anomaly_score": 0}
+
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+
+    X = np.array([snapshot_features], dtype=float)
+    score = float(model.decision_function(X)[0])
+    is_anomaly = model.predict(X)[0] == -1
+
+    return {
+        "is_anomaly": bool(is_anomaly),
+        "anomaly_score": round(score, 4),
+        "severity": "high" if score < -0.3 else ("medium" if score < -0.1 else "low"),
+    }
+
+
 @ModelRegistry.register("isolation_forest")
 class IsolationForestModel(BaseModel):
     """IsolationForest for multi-dimensional anomaly detection."""
@@ -45,23 +68,6 @@ class IsolationForestModel(BaseModel):
         """Score a snapshot for multi-dimensional anomalies.
 
         Returns dict with is_anomaly, anomaly_score, severity.
+        Delegates to module-level detect_contextual_anomalies().
         """
-        if not HAS_SKLEARN:
-            return {"is_anomaly": False, "anomaly_score": 0}
-
-        model_path = os.path.join(model_dir, "anomaly_detector.pkl")
-        if not os.path.isfile(model_path):
-            return {"is_anomaly": False, "anomaly_score": 0}
-
-        with open(model_path, "rb") as f:
-            model = pickle.load(f)
-
-        X = np.array([snapshot_features], dtype=float)
-        score = float(model.decision_function(X)[0])
-        is_anomaly = model.predict(X)[0] == -1
-
-        return {
-            "is_anomaly": bool(is_anomaly),
-            "anomaly_score": round(score, 4),
-            "severity": "high" if score < -0.3 else ("medium" if score < -0.1 else "low"),
-        }
+        return detect_contextual_anomalies(snapshot_features, model_dir)
