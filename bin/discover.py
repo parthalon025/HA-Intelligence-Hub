@@ -591,6 +591,10 @@ def discover_all():
         for domain, count in sorted(domains.items(), key=lambda x: x[1], reverse=True)
     ]
 
+    # Set top-level counts for metadata consumers
+    discovery["device_count"] = len(discovery["devices"])
+    discovery["area_count"] = len(discovery["areas"])
+
     log("Discovery complete!")
     return discovery
 
