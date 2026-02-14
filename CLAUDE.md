@@ -116,7 +116,7 @@ aria/
 | `pattern_recognition` | `aria/modules/patterns.py` | Detects recurring event sequences from logbook data |
 | `orchestrator` | `aria/modules/orchestrator.py` | Generates automation suggestions from detected patterns |
 | `shadow_engine` | `aria/modules/shadow_engine.py` | Predict-compare-score loop: captures context on state_changed, generates predictions (next_domain, room_activation, routine_trigger), scores against reality |
-| `data_quality` | `aria/modules/data_quality.py` | Entity classification pipeline — auto-exclude, edge cases, default include. Reads discovery cache, writes to `entity_curation` table. Runs on startup and daily. |
+| `data_quality` | `aria/modules/data_quality.py` | Entity classification pipeline — auto-exclude (domain, stale, noise, vehicle, unavailable grace period), edge cases, default include. Reads discovery cache, writes to `entity_curation` table. Runs on startup and daily. |
 | `intelligence` | `aria/modules/intelligence.py` | Assembles daily/intraday snapshots, baselines, predictions, ML scores into unified cache. Reads engine outputs (entity correlations, sequence anomalies, power profiles, automation suggestions). Sends Telegram digest on new insights. |
 | `activity_monitor` | `aria/modules/activity_monitor.py` | WebSocket listener for state_changed events, 15-min windowed activity log, adaptive snapshot triggering, prediction analytics. Emits filtered events to hub event bus for shadow engine. |
 
@@ -219,7 +219,7 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 ## Testing
 
 ```bash
-# Run all tests (~677 tests)
+# Run all tests (~747 tests)
 .venv/bin/python -m pytest tests/ -v
 
 # Test suites by area
@@ -262,7 +262,7 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 
 ## Environment
 
-- **HA instance:** 192.168.1.35:8123 (HAOS on Raspberry Pi, 3,058 entities, 10 capabilities)
+- **HA instance:** 192.168.1.35:8123 (HAOS on Raspberry Pi, 3,065 entities, 10 capabilities)
 - **Env vars:** HA_URL, HA_TOKEN from `~/.env`
 - **Python:** 3.12 via `.venv/` (aiohttp, scikit-learn, numpy, uvicorn, fastapi)
 - **Package config:** `pyproject.toml` (replaces old `requirements.txt`)
@@ -332,8 +332,15 @@ curl -s http://127.0.0.1:8001/api/config | python3 -m json.tool
 curl -s http://127.0.0.1:8001/api/curation/summary | python3 -m json.tool
 ```
 
+## HA Data Model
+
+HA uses a three-tier hierarchy: **entity → device → area**. Only ~0.2% of entities have a direct `area_id`. The rest inherit area through their parent device. Any feature touching area assignments must resolve through the device layer: check `entity.area_id` first, then fall back to `devices[entity.device_id].area_id`. The discovery pipeline (`bin/discover.py`) backfills this automatically, but frontend code should also use `getEffectiveArea()` as defense-in-depth.
+
+**Lesson learned:** `docs/lessons/2026-02-14-area-entity-resolution.md`
+
 ## Gotchas
 
+- **Entity area_id is usually inherited from device** — only 6/3,050 entities have direct area_id. Always resolve via device fallback. See "HA Data Model" above.
 - **All imports use `aria.*` namespace** — e.g. `from aria.hub.core import IntelligenceHub`, `from aria.engine.config import Config`
 - `bin/ha-hub.py` is a legacy wrapper — use `aria serve` instead
 - HA WebSocket requires `auth` message with token before subscribing
