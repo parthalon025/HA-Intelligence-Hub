@@ -136,6 +136,95 @@ function AccuracySummary({ accuracy, pipeline }) {
   );
 }
 
+function ThompsonExplorer({ accuracy }) {
+  const thompson = accuracy?.thompson_sampling;
+
+  if (!thompson || !thompson.buckets || Object.keys(thompson.buckets).length === 0) {
+    return (
+      <section class="space-y-3">
+        <div class="t-section-header" style="padding-bottom: 6px;"><h2 class="text-lg font-bold" style="color: var(--text-primary)">Thompson Sampling</h2></div>
+        <div class="t-callout" style="padding: 0.75rem;">
+          <span class="text-sm" style="color: var(--text-secondary)">Thompson sampling stats will appear after the shadow engine has made predictions.</span>
+        </div>
+      </section>
+    );
+  }
+
+  const bucketKeys = Object.keys(thompson.buckets);
+
+  return (
+    <section class="space-y-3">
+      <div class="t-section-header" style="padding-bottom: 6px;"><h2 class="text-lg font-bold" style="color: var(--text-primary)">Thompson Sampling</h2></div>
+      <p class="text-xs" style="color: var(--text-tertiary)">Thompson Sampling decides which predictions to try. Each time-of-day slot builds its own confidence — ARIA explores more in uncertain slots and exploits what works in confident ones.</p>
+      <div class="flex items-center gap-3 flex-wrap">
+        <span class="text-xs font-medium rounded-full px-2.5 py-0.5 capitalize" style="background: var(--accent-glow); color: var(--accent)">{thompson.strategy}</span>
+        <span class="text-xs" style="color: var(--text-tertiary)">discount: <span style="color: var(--text-secondary); font-weight: 600;">{thompson.discount_factor}</span></span>
+        <span class="text-xs" style="color: var(--text-tertiary)">window: <span style="color: var(--text-secondary); font-weight: 600;">{thompson.window_size}</span></span>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {bucketKeys.map((key) => {
+          const b = thompson.buckets[key];
+          const exploreColor = b.explore_rate > 0.5 ? 'color: var(--status-warning)' : 'color: var(--status-healthy)';
+          return (
+            <div key={key} class="t-frame" data-label={key} style="padding: 0.75rem;">
+              <div class="text-lg font-bold" style="color: var(--accent)">{b.alpha}/{b.beta}</div>
+              <div class="text-xs mt-1" style="color: var(--text-tertiary)">alpha/beta</div>
+              <div class="text-sm font-bold mt-2" style={exploreColor}>{Math.round(b.explore_rate * 100)}%</div>
+              <div class="text-xs" style="color: var(--text-tertiary)">explore rate</div>
+              <div class="text-xs mt-1" style="color: var(--text-secondary)">{b.samples} samples</div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function CorrectionPropagation({ propagation }) {
+  if (!propagation || propagation.enabled === false) {
+    return (
+      <section class="space-y-3">
+        <div class="t-section-header" style="padding-bottom: 6px;"><h2 class="text-lg font-bold" style="color: var(--text-primary)">Correction Propagation</h2></div>
+        <div class="t-callout" style="padding: 0.75rem;">
+          <span class="text-sm" style="color: var(--text-secondary)">Correction propagation is not active. Enable it in Settings → Correction Propagation.</span>
+        </div>
+      </section>
+    );
+  }
+
+  const stats = propagation.stats || {};
+  const bufferSize = stats.replay_buffer_size ?? 0;
+  const bufferCapacity = stats.replay_buffer_capacity ?? 1;
+  const fillPct = bufferCapacity > 0 ? Math.round((bufferSize / bufferCapacity) * 100) : 0;
+
+  return (
+    <section class="space-y-3">
+      <div class="flex items-center gap-3 t-section-header" style="padding-bottom: 6px;">
+        <h2 class="text-lg font-bold" style="color: var(--text-primary)">Correction Propagation</h2>
+        <span class="text-xs font-medium rounded-full px-2.5 py-0.5" style="background: var(--status-healthy-glow); color: var(--status-healthy)">enabled</span>
+      </div>
+      <p class="text-xs" style="color: var(--text-tertiary)">When ARIA gets a prediction wrong, it propagates the correction to similar situations nearby in time and space. The replay buffer stores recent corrections for learning.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="t-frame" data-label="replay buffer" style="padding: 1rem;">
+          <div class="text-2xl font-bold" style="color: var(--accent)">{bufferSize} / {bufferCapacity}</div>
+          <div class="text-sm mt-1" style="color: var(--text-tertiary)">replay buffer</div>
+          <div class="h-1.5 rounded-full mt-2" style="background: var(--bg-inset)">
+            <div class="h-1.5 rounded-full" style={`background: var(--accent); width: ${fillPct}%`} />
+          </div>
+        </div>
+        <div class="t-frame" data-label="cell observations" style="padding: 1rem;">
+          <div class="text-2xl font-bold" style="color: var(--accent)">{stats.cell_observations ?? 0}</div>
+          <div class="text-sm mt-1" style="color: var(--text-tertiary)">cell observations</div>
+        </div>
+        <div class="t-frame" data-label="kernel bandwidth" style="padding: 1rem;">
+          <div class="text-2xl font-bold" style="color: var(--accent)">{stats.kernel_bandwidth ?? 0}</div>
+          <div class="text-sm mt-1" style="color: var(--text-tertiary)">kernel bandwidth</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DailyTrend({ trend, pipeline }) {
   const stage = pipeline?.current_stage || 'backtest';
   const gate = GATE_REQUIREMENTS[stage];
@@ -316,6 +405,7 @@ export default function Shadow() {
   const [accuracy, setAccuracy] = useState(null);
   const [predictions, setPredictions] = useState(null);
   const [disagreements, setDisagreements] = useState(null);
+  const [propagation, setPropagation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [advanceError, setAdvanceError] = useState(null);
@@ -369,16 +459,18 @@ export default function Shadow() {
     setLoading(true);
     setError(null);
     try {
-      const [p, a, pr, d] = await Promise.all([
+      const [p, a, pr, d, prop] = await Promise.all([
         fetchJson('/api/pipeline'),
         fetchJson('/api/shadow/accuracy'),
         fetchJson('/api/shadow/predictions?limit=20'),
         fetchJson('/api/shadow/disagreements?limit=10'),
+        fetchJson('/api/shadow/propagation'),
       ]);
       setPipeline(p);
       setAccuracy(a);
       setPredictions(pr);
       setDisagreements(d);
+      setPropagation(prop);
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -437,11 +529,13 @@ export default function Shadow() {
 
       <PipelineStage pipeline={pipeline} onAdvance={handleAdvance} onRetreat={handleRetreat} advanceError={advanceError} />
       <AccuracySummary accuracy={accuracy} pipeline={pipeline} />
+      <ThompsonExplorer accuracy={accuracy} />
       <DailyTrend trend={accuracy?.daily_trend} pipeline={pipeline} />
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <PredictionFeed predictions={predictions} />
         <DisagreementsPanel disagreements={disagreements} />
       </div>
+      <CorrectionPropagation propagation={propagation} />
     </div>
   );
 }
