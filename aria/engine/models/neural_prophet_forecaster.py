@@ -8,8 +8,11 @@ Same metric interface as prophet_forecaster.py — operates on daily-frequency s
 and produces next-day forecasts with confidence intervals.
 """
 
+import logging
 import os
 import pickle
+
+logger = logging.getLogger(__name__)
 
 HAS_NEURAL_PROPHET = True
 try:
@@ -96,11 +99,11 @@ class NeuralProphetForecaster:
             * 100
         )
 
-        # Save model
+        # Save model + training data (needed for make_future_dataframe at predict time)
         os.makedirs(model_dir, exist_ok=True)
         model_path = os.path.join(model_dir, f"neuralprophet_{metric_name}.pkl")
         with open(model_path, "wb") as f:
-            pickle.dump(model, f)
+            pickle.dump({"model": model, "df": df}, f)
 
         # Extract seasonal components for insight
         components = {}
@@ -157,16 +160,22 @@ class NeuralProphetForecaster:
             return None
 
         with open(model_path, "rb") as f:
-            model = pickle.load(f)
+            saved = pickle.load(f)
 
-        # NeuralProphet requires historical data context for AR
-        future = model.make_future_dataframe(
-            df=model.predict(model.make_future_dataframe(model.make_future_dataframe(
-                df=pd.DataFrame({"ds": pd.date_range(end=pd.Timestamp.now().normalize(), periods=max(model.n_lags + 1, 14), freq="D")}),
-                periods=0,
-            ))),
-            periods=horizon_days,
-        )
+        # Support both new format (dict with model + df) and legacy (model only)
+        if isinstance(saved, dict):
+            model = saved["model"]
+            history_df = saved["df"]
+        else:
+            model = saved
+            history_df = None
+
+        if history_df is None:
+            logger.warning("No training data saved with model for %s", metric_name)
+            return None
+
+        # Standard NeuralProphet pattern: extend history with future periods, predict once
+        future = model.make_future_dataframe(history_df, periods=horizon_days)
         forecast = model.predict(future)
 
         # Get the last row (next-day prediction)
@@ -243,12 +252,12 @@ def train_neuralprophet_models(
         )
         results[metric] = result
         if "error" not in result:
-            print(
-                f"  NeuralProphet {metric}: MAE={result['mae']}, "
-                f"MAPE={result['mape']}%"
+            logger.info(
+                "NeuralProphet %s: MAE=%s, MAPE=%s%%",
+                metric, result["mae"], result["mape"],
             )
         else:
-            print(f"  NeuralProphet {metric}: {result['error']}")
+            logger.info("NeuralProphet %s: %s", metric, result["error"])
 
     return results
 
