@@ -9,6 +9,7 @@ Unified intelligence platform for Home Assistant — batch ML engine, real-time 
 **Lean roadmap:** `~/Documents/docs/plans/2026-02-11-ha-hub-lean-roadmap.md`
 **Activity monitor plan:** `~/.claude/plans/resilient-stargazing-catmull.md`
 **Shadow mode design:** `~/Documents/docs/plans/2026-02-12-ha-hub-shadow-mode-design.md`
+**Organic discovery design:** `docs/plans/2026-02-14-organic-capability-discovery-design.md`
 
 ## Running
 
@@ -60,6 +61,7 @@ All commands route through the unified `aria` entry point (`aria/cli.py`).
 | `aria sequences detect` | Detect anomalous event sequences |
 | `aria snapshot-intraday` | Collect intraday snapshot (used internally by hub) |
 | `aria sync-logs` | Sync HA logbook to local JSON |
+| `aria discover-organic` | Run organic capability discovery (Layer 1 + Layer 2) |
 
 Engine commands delegate to `aria.engine.cli` with old-style flags internally.
 
@@ -83,6 +85,14 @@ aria/
 │   ├── orchestrator.py     # Automation suggestions from detected patterns
 │   ├── shadow_engine.py    # Predict-compare-score loop for shadow mode
 │   ├── data_quality.py     # Entity classification pipeline (auto-exclude, edge, include)
+│   ├── organic_discovery/  # HDBSCAN-based capability discovery (domain + behavioral clustering)
+│   │   ├── module.py       # OrganicDiscoveryModule — full pipeline orchestration
+│   │   ├── feature_vectors.py  # Entity attribute → numeric feature matrix
+│   │   ├── clustering.py   # HDBSCAN clustering with silhouette scoring
+│   │   ├── behavioral.py   # Layer 2: co-occurrence matrix + temporal patterns
+│   │   ├── scoring.py      # 5-component weighted usefulness score (0-100)
+│   │   ├── naming.py       # Heuristic + Ollama LLM naming backends
+│   │   └── seed_validation.py  # Jaccard similarity validation against seed capabilities
 │   ├── intelligence.py     # Unified cache assembly (snapshots, baselines, predictions, ML)
 │   └── activity_monitor.py # WebSocket state_changed listener, 15-min windows, analytics
 ├── engine/                 # Batch ML engine (formerly ha-intelligence)
@@ -107,7 +117,7 @@ aria/
 | `bin/discover.py` | Standalone discovery CLI (also used as subprocess) |
 | `bin/ha-log-sync` | Log sync script (called by `aria sync-logs`) |
 
-### Hub Modules (8, registered in order)
+### Hub Modules (9, registered in order)
 
 | Module | File | Purpose |
 |--------|------|---------|
@@ -117,6 +127,7 @@ aria/
 | `orchestrator` | `aria/modules/orchestrator.py` | Generates automation suggestions from detected patterns |
 | `shadow_engine` | `aria/modules/shadow_engine.py` | Predict-compare-score loop: captures context on state_changed, generates predictions (next_domain, room_activation, routine_trigger), scores against reality |
 | `data_quality` | `aria/modules/data_quality.py` | Entity classification pipeline — auto-exclude (domain, stale, noise, vehicle, unavailable grace period), edge cases, default include. Reads discovery cache, writes to `entity_curation` table. Runs on startup and daily. |
+| `organic_discovery` | `aria/modules/organic_discovery/module.py` | Two-layer HDBSCAN capability discovery: Layer 1 clusters entities by attributes, Layer 2 clusters by temporal co-occurrence. Usefulness scoring, seed validation, autonomy modes, heuristic/Ollama naming. Weekly via systemd timer. |
 | `intelligence` | `aria/modules/intelligence.py` | Assembles daily/intraday snapshots, baselines, predictions, ML scores into unified cache. Reads engine outputs (entity correlations, sequence anomalies, power profiles, automation suggestions). Sends Telegram digest on new insights. |
 | `activity_monitor` | `aria/modules/activity_monitor.py` | WebSocket listener for state_changed events, 15-min windowed activity log, adaptive snapshot triggering, prediction analytics. Emits filtered events to hub event bus for shadow engine. |
 
@@ -137,6 +148,7 @@ aria/
 **Category-based:** `activity_log`, `activity_summary`, `areas`, `capabilities`, `devices`, `discovery_metadata`, `entities`, `intelligence`
 **Shadow tables:** `predictions` (predict-compare-score records), `pipeline_state` (backtest→shadow→suggest→autonomous progression)
 **Phase 2 tables:** `config` (editable engine parameters), `entity_curation` (tiered entity classification), `config_history` (change audit log)
+**Organic discovery keys:** `discovery_history` (run history), `discovery_settings` (autonomy mode, naming backend, thresholds)
 **ML data keys in intelligence cache:** `drift_status`, `feature_selection`, `reference_model`, `incremental_training`, `forecaster_backend`, `anomaly_alerts`, `autoencoder_status`, `isolation_forest_status`, `shap_attributions`
 
 ### Dashboard (Preact SPA)
@@ -178,6 +190,9 @@ cd aria/dashboard/spa && npx esbuild src/index.jsx --bundle --outfile=dist/bundl
 | `TimeChart` | `components/TimeChart.jsx` | uPlot wrapper — full mode (`<figure>`) or `compact` sparkline mode (no axes) |
 | `StatsGrid` | `components/StatsGrid.jsx` | Grid of labeled values with `.t-bracket` labels |
 | `AriaLogo` | `components/AriaLogo.jsx` | SVG pixel-art logo |
+| `UsefulnessBar` | `components/UsefulnessBar.jsx` | Horizontal percentage bar with color thresholds (green/orange/red) |
+| `CapabilityDetail` | `components/CapabilityDetail.jsx` | Expanded capability view: 5 usefulness bars, metadata, temporal patterns, entity list |
+| `DiscoverySettings` | `components/DiscoverySettings.jsx` | Settings panel: autonomy mode, naming backend, thresholds, Save/Run Now |
 
 #### Page Data Sources
 
@@ -219,13 +234,13 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 ## Testing
 
 ```bash
-# Run all tests (~747 tests)
+# Run all tests (~973 tests)
 .venv/bin/python -m pytest tests/ -v
 
 # Test suites by area
-.venv/bin/python -m pytest tests/hub/ -v         # Hub tests (396 tests)
+.venv/bin/python -m pytest tests/hub/ -v         # Hub tests (~544 tests)
 .venv/bin/python -m pytest tests/engine/ -v       # Engine tests (177 tests)
-.venv/bin/python -m pytest tests/integration/ -v  # Integration tests (5 tests)
+.venv/bin/python -m pytest tests/integration/ -v  # Integration tests (9 tests)
 
 # Individual hub test files
 .venv/bin/python -m pytest tests/hub/test_activity_monitor.py -v
@@ -241,6 +256,17 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 .venv/bin/python -m pytest tests/hub/test_discover.py -v
 .venv/bin/python -m pytest tests/hub/test_patterns.py -v
 .venv/bin/python -m pytest tests/hub/test_integration.py -v
+
+# Organic discovery tests (148 tests across 8 files)
+.venv/bin/python -m pytest tests/hub/test_organic_feature_vectors.py -v
+.venv/bin/python -m pytest tests/hub/test_organic_clustering.py -v
+.venv/bin/python -m pytest tests/hub/test_organic_seed_validation.py -v
+.venv/bin/python -m pytest tests/hub/test_organic_scoring.py -v
+.venv/bin/python -m pytest tests/hub/test_organic_naming.py -v
+.venv/bin/python -m pytest tests/hub/test_organic_behavioral.py -v
+.venv/bin/python -m pytest tests/hub/test_organic_discovery_module.py -v
+.venv/bin/python -m pytest tests/hub/test_api_organic_discovery.py -v
+.venv/bin/python -m pytest tests/integration/test_organic_discovery_integration.py -v
 
 # Individual engine test files
 .venv/bin/python -m pytest tests/engine/test_models.py -v
@@ -322,6 +348,31 @@ curl -s http://127.0.0.1:8001/api/ml/shap | python3 -m json.tool
 curl -s http://127.0.0.1:8001/api/shadow/propagation | python3 -m json.tool
 ```
 
+### Organic Discovery API
+
+```bash
+# Candidate capabilities (discovered but not promoted)
+curl -s http://127.0.0.1:8001/api/capabilities/candidates | python3 -m json.tool
+
+# Discovery run history
+curl -s http://127.0.0.1:8001/api/capabilities/history | python3 -m json.tool
+
+# Promote/archive a capability
+curl -s -X PUT http://127.0.0.1:8001/api/capabilities/kitchen_lights/promote
+curl -s -X PUT http://127.0.0.1:8001/api/capabilities/kitchen_lights/archive
+
+# Discovery settings (autonomy mode, naming backend, thresholds)
+curl -s http://127.0.0.1:8001/api/settings/discovery | python3 -m json.tool
+curl -s -X PUT http://127.0.0.1:8001/api/settings/discovery -H 'Content-Type: application/json' \
+  -d '{"autonomy_mode": "auto_promote"}'
+
+# Trigger on-demand discovery run
+curl -s -X POST http://127.0.0.1:8001/api/discovery/run
+
+# Discovery module status
+curl -s http://127.0.0.1:8001/api/discovery/status | python3 -m json.tool
+```
+
 ### Phase 2 Config & Curation API
 
 ```bash
@@ -336,7 +387,7 @@ curl -s http://127.0.0.1:8001/api/curation/summary | python3 -m json.tool
 
 HA uses a three-tier hierarchy: **entity → device → area**. Only ~0.2% of entities have a direct `area_id`. The rest inherit area through their parent device. Any feature touching area assignments must resolve through the device layer: check `entity.area_id` first, then fall back to `devices[entity.device_id].area_id`. The discovery pipeline (`bin/discover.py`) backfills this automatically, but frontend code should also use `getEffectiveArea()` as defense-in-depth.
 
-**Lesson learned:** `docs/lessons/2026-02-14-area-entity-resolution.md`
+**Lessons learned:** `~/Documents/docs/lessons/2026-02-14-area-entity-resolution.md`, `~/Documents/docs/lessons/2026-02-14-organic-discovery-implementation.md`
 
 ## Gotchas
 
@@ -361,3 +412,6 @@ HA uses a three-tier hierarchy: **entity → device → area**. Only ~0.2% of en
 - `hub.publish()` calls BOTH subscriber callbacks AND `module.on_event()` — shadow engine uses subscribe-only pattern with on_event as no-op to prevent double-handling
 - Activity monitor emits events via fire-and-forget `create_task()` — never blocks state processing
 - Engine commands in `aria` CLI delegate to `aria.engine.cli` internally — they translate subcommands to old-style `--flags`
+- **Organic discovery needs 15+ entities per group** — HDBSCAN won't cluster small groups. If discovery finds no organic capabilities, the entity count may be too low or data too homogeneous.
+- **Organic discovery Ollama contention** — If LLM naming is enabled, the Sunday 4:00 AM run (~45 min) overlaps with suggest-automations at 4:30 AM. Move one timer if both use Ollama.
+- **Capabilities cache is extended, not replaced** — Organic discovery adds fields (`source`, `usefulness`, `layer`, `status`, etc.) to the existing capabilities cache. Existing consumers see the same key with optional new fields. Seed capabilities are always preserved.
