@@ -44,7 +44,7 @@ class TestConfigDefaultsStructure:
         assert len(keys) == len(set(keys)), f"Duplicate keys: {[k for k in keys if keys.count(k) > 1]}"
 
     def test_expected_parameter_count(self):
-        assert len(CONFIG_DEFAULTS) == 35
+        assert len(CONFIG_DEFAULTS) == 49
 
     def test_all_categories_are_set(self):
         for param in CONFIG_DEFAULTS:
@@ -73,15 +73,15 @@ class TestSeedConfigDefaults:
     @pytest.mark.asyncio
     async def test_seed_populates_all_params(self, cache):
         seeded = await seed_config_defaults(cache)
-        assert seeded == 35
+        assert seeded == 49
 
         configs = await cache.get_all_config()
-        assert len(configs) == 35
+        assert len(configs) == 49
 
     @pytest.mark.asyncio
     async def test_seed_is_idempotent(self, cache):
         first = await seed_config_defaults(cache)
-        assert first == 35
+        assert first == 49
 
         second = await seed_config_defaults(cache)
         assert second == 0  # nothing new inserted
