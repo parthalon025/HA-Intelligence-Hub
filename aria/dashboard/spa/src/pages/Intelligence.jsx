@@ -16,6 +16,9 @@ import { Baselines } from './intelligence/Baselines.jsx';
 import { DailyInsight } from './intelligence/DailyInsight.jsx';
 import { Correlations } from './intelligence/Correlations.jsx';
 import { SystemStatus } from './intelligence/SystemStatus.jsx';
+import { DriftStatus } from './intelligence/DriftStatus.jsx';
+import { AnomalyAlerts } from './intelligence/AnomalyAlerts.jsx';
+import { ShapAttributions } from './intelligence/ShapAttributions.jsx';
 
 function ShadowBrief({ shadowAccuracy, pipeline }) {
   if (!shadowAccuracy && !pipeline) return null;
@@ -84,10 +87,16 @@ export default function Intelligence() {
   const { data, loading, error, refetch } = useCache('intelligence');
   const [shadowAccuracy, setShadowAccuracy] = useState(null);
   const [pipeline, setPipeline] = useState(null);
+  const [drift, setDrift] = useState(null);
+  const [anomalies, setAnomalies] = useState(null);
+  const [shap, setShap] = useState(null);
 
   useEffect(() => {
     fetchJson('/api/shadow/accuracy').then(setShadowAccuracy).catch(() => {});
     fetchJson('/api/pipeline').then(setPipeline).catch(() => {});
+    fetchJson('/api/ml/drift').then(setDrift).catch(() => {});
+    fetchJson('/api/ml/anomalies').then(setAnomalies).catch(() => {});
+    fetchJson('/api/ml/shap').then(setShap).catch(() => {});
   }, []);
 
   const intel = useComputed(() => {
@@ -200,7 +209,16 @@ export default function Intelligence() {
         <Correlations correlations={intel.correlations} />
         <SystemStatus runLog={intel.run_log} mlModels={intel.ml_models} metaLearning={intel.meta_learning} />
 
-        {/* Row 8: Configuration redirect (full width) */}
+        {/* Row 8: DriftStatus + AnomalyAlerts (2-col on tablet+) */}
+        <DriftStatus drift={drift} />
+        <AnomalyAlerts anomalies={anomalies} />
+
+        {/* Row 9: ShapAttributions (full width) */}
+        <div class="sm:col-span-2">
+          <ShapAttributions shap={shap} />
+        </div>
+
+        {/* Row 10: Configuration redirect (full width) */}
         <div class="sm:col-span-2">
           <Section title="Configuration" subtitle="Engine parameters are now managed in Settings.">
             <div class="t-callout p-3 text-sm flex items-center justify-between">
