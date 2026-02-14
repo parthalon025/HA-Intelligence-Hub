@@ -65,6 +65,29 @@ def generate_predictions(
     dt = datetime.strptime(target_date, "%Y-%m-%d")
     dow = dt.strftime("%A")
     baseline = baselines.get(dow, {})
+
+    # Fall back to overall average when target day-of-week has no baseline
+    if not baseline and baselines:
+        metrics_keys = ["power_watts", "lights_on", "devices_home", "unavailable", "useful_events"]
+        baseline = {"sample_count": 0}
+        total_samples = 0
+        for day_bl in baselines.values():
+            if not isinstance(day_bl, dict) or "sample_count" not in day_bl:
+                continue
+            n = day_bl["sample_count"]
+            total_samples += n
+            for mk in metrics_keys:
+                if mk in day_bl and isinstance(day_bl[mk], dict):
+                    if mk not in baseline:
+                        baseline[mk] = {"mean": 0, "stddev": 0, "min": 0, "max": 0}
+                    baseline[mk]["mean"] += day_bl[mk].get("mean", 0) * n
+                    baseline[mk]["stddev"] = max(baseline[mk]["stddev"], day_bl[mk].get("stddev", 0))
+        if total_samples > 0:
+            baseline["sample_count"] = total_samples
+            for mk in metrics_keys:
+                if mk in baseline:
+                    baseline[mk]["mean"] = round(baseline[mk]["mean"] / total_samples, 1)
+
     days = count_days_of_data(paths)
 
     predictions = {

@@ -341,6 +341,8 @@ HA uses a three-tier hierarchy: **entity → device → area**. Only ~0.2% of en
 ## Gotchas
 
 - **Entity area_id is usually inherited from device** — only 6/3,050 entities have direct area_id. Always resolve via device fallback. See "HA Data Model" above.
+- **Collector registration requires extractors import** — `snapshot.py` imports `CollectorRegistry` from `registry.py` but collectors live in `extractors.py`. Without `import aria.engine.collectors.extractors`, the registry is empty and all snapshot metrics are 0. The `__init__.py` and `snapshot.py` both import it now.
+- **Predictions fall back to overall average** — When the target day-of-week has no baseline (early data), `predictor.py` averages all available day baselines. Without this, predictions for missing weekdays are all 0.
 - **All imports use `aria.*` namespace** — e.g. `from aria.hub.core import IntelligenceHub`, `from aria.engine.config import Config`
 - `bin/ha-hub.py` is a legacy wrapper — use `aria serve` instead
 - HA WebSocket requires `auth` message with token before subscribing

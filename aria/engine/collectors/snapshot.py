@@ -6,6 +6,7 @@ from datetime import datetime
 from aria.engine.config import AppConfig, HolidayConfig
 from aria.engine.storage.data_store import DataStore
 from aria.engine.collectors.registry import CollectorRegistry
+import aria.engine.collectors.extractors  # noqa: F401 — trigger decorator registration
 from aria.engine.collectors.ha_api import (
     fetch_ha_states,
     fetch_weather,
