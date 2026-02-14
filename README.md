@@ -70,9 +70,12 @@ ARIA watches, learns, and predicts — **entirely on your local hardware.** No c
 
 ### See
 
-- **12-page interactive dashboard** — Preact SPA with live WebSocket updates
-- **Real-time activity monitor** — 15-minute windowed analysis of every state change
-- **Predictions vs actuals** — track how well ARIA's models perform over time
+- **12-page interactive dashboard** — Preact SPA with live WebSocket updates, terminal aesthetic
+- **Data-forward visualizations** — sparkline KPIs, heatmap baselines, correlation matrices, swim-lane timelines
+- **Small multiples** — each metric gets its own chart at its own scale (Tufte-inspired)
+- **Real-time activity monitor** — swim-lane timeline + 15-minute windowed analysis
+- **Shadow accuracy tracking** — rolling 7-day accuracy line with prediction volume and gate thresholds
+- **Layman-readable** — every chart includes a plain-English explanation and color legend
 
 ## Quick Start
 
@@ -186,10 +189,10 @@ The dashboard ships with 12 pages covering the full intelligence pipeline:
 | **Discovery** | Every entity, device, and area HA knows about |
 | **Capabilities** | Detected home capabilities (lighting, climate, presence, etc.) |
 | **Data Curation** | Entity-level include/exclude tiering for noise control |
-| **Intelligence** | Baselines, predictions vs actuals, trends, correlations, LLM insights |
+| **Intelligence** | Heatmap baselines, small-multiple trends, correlation matrix, swim-lane activity, LLM insights |
 | **Predictions** | ML model outputs with confidence scores |
 | **Patterns** | Recurring event sequences detected from your logbook |
-| **Shadow Mode** | Prediction accuracy, high-confidence disagreements, pipeline stage |
+| **Shadow Mode** | Dual accuracy chart (rolling line + volume bars), disagreements, pipeline gates |
 | **Automations** | LLM-suggested HA automation YAML from detected patterns |
 | **Settings** | Tunable parameters — retraining schedules, thresholds, model config |
 | **Guide** | Interactive onboarding — how ARIA learns, what each page does, FAQ |
