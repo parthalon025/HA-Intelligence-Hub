@@ -1,34 +1,17 @@
 import { Section, Callout } from './utils.jsx';
+import TimeChart from '../../components/TimeChart.jsx';
 
-function BarChart({ data, dataKey, label, color }) {
-  if (!data || data.length === 0) return null;
-  const values = data.map(d => d[dataKey]).filter(v => v != null);
-  const max = Math.max(...values, 1);
-
-  return (
-    <div class="space-y-1">
-      <div class="text-xs font-medium" style="color: var(--text-secondary)">{label}</div>
-      <div class="flex items-end gap-1 h-12">
-        {data.map((d, i) => {
-          const val = d[dataKey];
-          if (val == null) return <div key={i} class="flex-1" />;
-          const height = Math.max((val / max) * 100, 4);
-          return (
-            <div
-              key={i}
-              class="flex-1 rounded-t transition-all"
-              style={{ height: `${height}%`, backgroundColor: color, minWidth: '4px' }}
-              title={`${d.date || 'h' + d.hour}: ${val}`}
-            />
-          );
-        })}
-      </div>
-      <div class="flex justify-between" style="font-size: 10px; color: var(--text-tertiary)">
-        <span>{data[0]?.date || ('h' + data[0]?.hour)}</span>
-        {data.length > 1 && <span>{data[data.length - 1]?.date || ('h' + data[data.length - 1]?.hour)}</span>}
-      </div>
-    </div>
-  );
+function toUPlotData(records, timeKey, metrics) {
+  const timestamps = records.map(r => {
+    if (timeKey === 'date') {
+      return Math.floor(new Date(r.date).getTime() / 1000);
+    } else {
+      const now = new Date();
+      return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate(), r.hour).getTime() / 1000);
+    }
+  });
+  const series = metrics.map(m => records.map(r => r[m] ?? null));
+  return [timestamps, ...series];
 }
 
 export function TrendsOverTime({ trendData, intradayTrend }) {
@@ -39,7 +22,7 @@ export function TrendsOverTime({ trendData, intradayTrend }) {
     return (
       <Section
         title="Trends Over Time"
-        subtitle="Spot when something changed \u2014 a new device, a routine shift, or a problem building."
+        subtitle="Spot when something changed — a new device, a routine shift, or a problem building."
       >
         <Callout>No trend data yet. Daily snapshots are collected each night at 11:30 PM.</Callout>
       </Section>
@@ -58,31 +41,47 @@ export function TrendsOverTime({ trendData, intradayTrend }) {
     }
     if (last.unavailable != null && prev.unavailable != null) {
       const d = last.unavailable - prev.unavailable;
-      if (d > 10) changes.push(`${d} more entities unavailable than yesterday \u2014 check your network`);
+      if (d > 10) changes.push(`${d} more entities unavailable than yesterday — check your network`);
     }
     if (changes.length > 0) trendNote = changes.join('. ') + '.';
   }
 
+  const dailySeries = [
+    { label: 'Power (W)', color: 'var(--accent)' },
+    { label: 'Lights On', color: 'var(--accent-warm)' },
+    { label: 'Unavailable', color: 'var(--status-error)' },
+  ];
+
+  const intradaySeries = [
+    { label: 'Power (W)', color: 'var(--accent-dim)' },
+    { label: 'Unavailable', color: 'var(--status-error)' },
+  ];
+
   return (
     <Section
       title="Trends Over Time"
-      subtitle="Spot when something changed \u2014 a new device, a routine shift, or a problem building. Each bar is one day."
+      subtitle="Spot when something changed — a new device, a routine shift, or a problem building."
     >
       {trendNote && <Callout>{trendNote}</Callout>}
-      <div class="t-card p-4 space-y-4">
+      <div class="t-frame" data-label="trends">
         {hasTrend && (
           <div class="space-y-3">
-            <div class="text-xs font-bold uppercase" style="color: var(--text-tertiary)">Daily</div>
-            <BarChart data={trendData} dataKey="power_watts" label="Power (W) \u2014 total household draw" color="var(--accent)" />
-            <BarChart data={trendData} dataKey="lights_on" label="Lights On \u2014 how many at snapshot time" color="var(--accent-warm)" />
-            <BarChart data={trendData} dataKey="unavailable" label="Unavailable \u2014 entities not responding (should be low)" color="var(--status-error)" />
+            <div class="text-xs font-bold uppercase" style="color: var(--text-tertiary)">Daily (30d)</div>
+            <TimeChart
+              data={toUPlotData(trendData, 'date', ['power_watts', 'lights_on', 'unavailable'])}
+              series={dailySeries}
+              height={140}
+            />
           </div>
         )}
         {hasIntraday && (
           <div class="space-y-3">
             <div class="text-xs font-bold uppercase" style="color: var(--text-tertiary)">Today (Intraday)</div>
-            <BarChart data={intradayTrend} dataKey="power_watts" label="Power (W)" color="var(--accent-dim)" />
-            <BarChart data={intradayTrend} dataKey="unavailable" label="Unavailable" color="var(--status-error)" />
+            <TimeChart
+              data={toUPlotData(intradayTrend, 'hour', ['power_watts', 'unavailable'])}
+              series={intradaySeries}
+              height={100}
+            />
           </div>
         )}
       </div>
