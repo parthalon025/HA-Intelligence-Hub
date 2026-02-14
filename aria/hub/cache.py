@@ -174,6 +174,18 @@ class CacheManager:
             )
         """)
 
+        # Correction propagation replay buffer
+        await self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS propagation_buffer (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prediction_id TEXT NOT NULL,
+                context TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                priority REAL NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+
         await self._conn.commit()
 
     async def close(self):

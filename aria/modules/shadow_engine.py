@@ -197,6 +197,176 @@ class ThompsonSampler:
         }
 
 
+class CorrectionPropagator:
+    """Adaptive correction propagation using Slivkins zooming + prioritized replay.
+
+    Propagates prediction corrections to nearby contexts using an adaptive
+    radius that narrows as more observations accumulate (Slivkins zooming).
+    Maintains a prioritized experience replay buffer weighted by TD-error
+    so high-surprise disagreements are revisited more often.
+
+    Reference: Slivkins, "Contextual Bandits with Similarity Information" (JMLR 2014).
+    """
+
+    def __init__(
+        self,
+        base_radius_hours: float = 1.0,
+        min_observations_for_narrow: int = 10,
+        kernel_bandwidth: float = 0.5,
+        replay_buffer_size: int = 200,
+        replay_alpha: float = 0.6,
+        max_propagations_per_score: int = 5,
+    ):
+        self.base_radius_hours = base_radius_hours
+        self.min_observations_for_narrow = min_observations_for_narrow
+        self.kernel_bandwidth = kernel_bandwidth
+        self.replay_buffer_size = replay_buffer_size
+        self.replay_alpha = replay_alpha
+        self.max_propagations_per_score = max_propagations_per_score
+
+        # Replay buffer: list of dicts with prediction_id, context, confidence, priority
+        self.replay_buffer: List[Dict[str, Any]] = []
+
+        # Cell observation counts for adaptive radius
+        self._cell_observations: Dict[str, int] = defaultdict(int)
+
+    def get_adaptive_radius(self, cell_key: str, observations: int) -> float:
+        """Compute adaptive radius that narrows with more observations.
+
+        Uses Slivkins zooming: radius = base / sqrt(max(observations, 1)).
+        Sparse contexts get wider radii (more exploration), dense contexts
+        get tighter radii (more precision).
+
+        Args:
+            cell_key: Context cell identifier.
+            observations: Number of observations in this cell.
+
+        Returns:
+            Adaptive radius in hours.
+        """
+        return self.base_radius_hours / math.sqrt(max(observations, 1))
+
+    def compute_kernel_weight(
+        self, time_delta: float, room_match: bool, pattern_sim: float
+    ) -> float:
+        """Compute Gaussian kernel weight for context similarity.
+
+        Combines temporal distance, room co-location, and pattern similarity
+        into a single [0, 1] weight via a Gaussian kernel.
+
+        Args:
+            time_delta: Absolute time difference in seconds.
+            room_match: Whether the rooms match.
+            pattern_sim: Pattern similarity score in [0, 1].
+
+        Returns:
+            Kernel weight in [0, 1].
+        """
+        # Normalize time_delta to hours for the kernel
+        time_hours = time_delta / 3600.0
+
+        # Gaussian kernel over time
+        time_weight = math.exp(-0.5 * (time_hours / max(self.kernel_bandwidth, 1e-9)) ** 2)
+
+        # Room match bonus
+        room_weight = 1.0 if room_match else 0.5
+
+        # Combine: time * room * pattern_sim
+        combined = time_weight * room_weight * max(pattern_sim, 0.0)
+
+        return max(0.0, min(1.0, combined))
+
+    def add_to_replay(
+        self,
+        prediction_id: str,
+        context: Dict[str, Any],
+        confidence: float,
+        td_error: float,
+    ) -> None:
+        """Add a disagreement to the prioritized replay buffer.
+
+        Priority is based on absolute TD-error (higher surprise = higher priority).
+        When buffer is full, the lowest-priority entry is evicted.
+
+        Args:
+            prediction_id: Unique prediction identifier.
+            context: Prediction context snapshot.
+            confidence: Original prediction confidence.
+            td_error: Temporal difference error (surprise magnitude).
+        """
+        entry = {
+            "prediction_id": prediction_id,
+            "context": context,
+            "confidence": confidence,
+            "priority": abs(td_error),
+        }
+
+        if len(self.replay_buffer) >= self.replay_buffer_size:
+            # Find and remove the lowest-priority entry
+            min_idx = 0
+            min_priority = self.replay_buffer[0]["priority"]
+            for i, item in enumerate(self.replay_buffer[1:], 1):
+                if item["priority"] < min_priority:
+                    min_priority = item["priority"]
+                    min_idx = i
+            # Only replace if new entry has higher priority
+            if entry["priority"] > min_priority:
+                self.replay_buffer[min_idx] = entry
+        else:
+            self.replay_buffer.append(entry)
+
+    def sample_replay(self) -> Optional[Dict[str, Any]]:
+        """Sample from replay buffer with prioritized probability.
+
+        P(i) = priority_i^alpha / sum(priority_j^alpha for all j).
+        Higher TD-error entries are sampled more frequently.
+
+        Returns:
+            Sampled replay entry, or None if buffer is empty.
+        """
+        if not self.replay_buffer:
+            return None
+
+        # Compute sampling probabilities
+        priorities = [entry["priority"] ** self.replay_alpha for entry in self.replay_buffer]
+        total = sum(priorities)
+
+        if total <= 0:
+            # Uniform fallback if all priorities are zero
+            return random.choice(self.replay_buffer)
+
+        probs = [p / total for p in priorities]
+
+        # Weighted random selection
+        r = random.random()
+        cumulative = 0.0
+        for i, prob in enumerate(probs):
+            cumulative += prob
+            if r <= cumulative:
+                return self.replay_buffer[i]
+
+        return self.replay_buffer[-1]
+
+    def record_cell_observation(self, cell_key: str) -> None:
+        """Record an observation in a context cell.
+
+        Args:
+            cell_key: Context cell identifier.
+        """
+        self._cell_observations[cell_key] += 1
+
+    def get_cell_observations(self, cell_key: str) -> int:
+        """Get the number of observations in a context cell.
+
+        Args:
+            cell_key: Context cell identifier.
+
+        Returns:
+            Number of observations recorded for this cell.
+        """
+        return self._cell_observations.get(cell_key, 0)
+
+
 class ShadowEngine(Module):
     """Shadow mode prediction engine: predict-compare-score loop."""
 

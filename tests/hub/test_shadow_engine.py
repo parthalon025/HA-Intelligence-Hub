@@ -1700,3 +1700,90 @@ class TestThompsonPersistence:
             assert sampler2.get_state() == state
         finally:
             await cache.close()
+
+
+# ============================================================================
+# Correction Propagation (Slivkins Zooming + Replay)
+# ============================================================================
+
+
+class TestCorrectionPropagator:
+    """Tests for adaptive correction propagation (Slivkins zooming)."""
+
+    def test_adaptive_radius_narrows_with_observations(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator(base_radius_hours=1.0, min_observations_for_narrow=10)
+        radius_sparse = prop.get_adaptive_radius("morning_home", observations=2)
+        radius_dense = prop.get_adaptive_radius("morning_home", observations=100)
+        assert radius_sparse > radius_dense, "Sparse context should have wider radius"
+
+    def test_kernel_decay_weights(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator(kernel_bandwidth=0.5)
+        w_same = prop.compute_kernel_weight(time_delta=0, room_match=True, pattern_sim=1.0)
+        w_diff = prop.compute_kernel_weight(time_delta=3600, room_match=False, pattern_sim=0.0)
+        assert w_same > w_diff
+        assert 0 <= w_diff <= 1
+        assert 0 <= w_same <= 1
+
+    def test_replay_buffer_stores_disagreements(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator(replay_buffer_size=5)
+        for i in range(10):
+            prop.add_to_replay(
+                prediction_id=f"pred_{i}",
+                context={"time_bucket": "morning"},
+                confidence=0.8,
+                td_error=0.5 + i * 0.1,
+            )
+        assert len(prop.replay_buffer) <= 5
+
+    def test_prioritized_sampling(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator(replay_alpha=0.6)
+        prop.add_to_replay("low", {}, 0.5, td_error=0.1)
+        prop.add_to_replay("high", {}, 0.5, td_error=0.9)
+        samples = [prop.sample_replay() for _ in range(100)]
+        high_count = sum(1 for s in samples if s and s["prediction_id"] == "high")
+        low_count = sum(1 for s in samples if s and s["prediction_id"] == "low")
+        assert high_count > low_count, "Higher TD-error should be sampled more often"
+
+    def test_cell_observation_tracking(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator()
+        assert prop.get_cell_observations("morning_home") == 0
+        prop.record_cell_observation("morning_home")
+        prop.record_cell_observation("morning_home")
+        assert prop.get_cell_observations("morning_home") == 2
+
+    def test_sample_replay_empty_buffer(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator()
+        assert prop.sample_replay() is None
+
+    def test_kernel_weight_zero_pattern_sim(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator(kernel_bandwidth=0.5)
+        # Even with time_delta=0 and room_match=True, pattern_sim=0 should give 0
+        w = prop.compute_kernel_weight(time_delta=0, room_match=True, pattern_sim=0.0)
+        assert w == 0.0
+
+    def test_replay_buffer_evicts_lowest_priority(self):
+        from aria.modules.shadow_engine import CorrectionPropagator
+
+        prop = CorrectionPropagator(replay_buffer_size=3)
+        prop.add_to_replay("a", {}, 0.5, td_error=0.1)
+        prop.add_to_replay("b", {}, 0.5, td_error=0.5)
+        prop.add_to_replay("c", {}, 0.5, td_error=0.9)
+        # Buffer full, add high-priority entry
+        prop.add_to_replay("d", {}, 0.5, td_error=0.8)
+        ids = {e["prediction_id"] for e in prop.replay_buffer}
+        assert "a" not in ids, "Lowest priority entry should be evicted"
+        assert "d" in ids
