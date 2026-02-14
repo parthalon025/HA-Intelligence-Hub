@@ -51,12 +51,15 @@ def build_cooccurrence_matrix(
     if not logbook_entries:
         return np.empty((0, 0)), []
 
-    # 1. Group entity_ids by time window
+    # 1. Group entity_ids by time window (skip system entries without entity_id)
     windows: dict[tuple, set[str]] = defaultdict(set)
     for entry in logbook_entries:
+        eid = entry.get("entity_id")
+        if not eid:
+            continue
         ts = _parse_when(entry["when"])
         key = _window_key(ts, window_minutes)
-        windows[key].add(entry["entity_id"])
+        windows[key].add(eid)
 
     # 2. Collect all unique entity IDs in stable sorted order
     all_entities: set[str] = set()
@@ -97,7 +100,7 @@ def extract_temporal_pattern(
     entity_set = set(entity_ids)
     timestamps: list[datetime] = []
     for entry in logbook_entries:
-        if entry["entity_id"] in entity_set:
+        if entry.get("entity_id") in entity_set:
             timestamps.append(_parse_when(entry["when"]))
 
     if not timestamps:
