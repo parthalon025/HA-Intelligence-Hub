@@ -393,6 +393,92 @@ def create_api(hub: IntelligenceHub) -> FastAPI:
             logger.exception("Error getting SHAP attributions")
             raise HTTPException(status_code=500, detail="Internal server error")
 
+    # --- Organic discovery endpoints ---
+
+    @router.get("/api/capabilities/candidates")
+    async def get_capability_candidates():
+        """Return only candidate capabilities."""
+        cached = await hub.cache.get("capabilities")
+        if not cached or not cached.get("data"):
+            return {}
+        return {name: cap for name, cap in cached["data"].items() if cap.get("status") == "candidate"}
+
+    @router.get("/api/capabilities/history")
+    async def get_discovery_history():
+        """Return discovery run history."""
+        cached = await hub.cache.get("discovery_history")
+        if not cached or not cached.get("data"):
+            return []
+        return cached["data"]
+
+    @router.put("/api/capabilities/{capability_name}/promote")
+    async def promote_capability(capability_name: str):
+        """Manually promote a candidate capability."""
+        cached = await hub.cache.get("capabilities")
+        if not cached or not cached.get("data"):
+            raise HTTPException(status_code=404, detail="Capabilities not found")
+        caps = cached["data"]
+        if capability_name not in caps:
+            raise HTTPException(status_code=404, detail=f"Unknown capability: {capability_name}")
+        caps[capability_name]["status"] = "promoted"
+        caps[capability_name]["promoted_at"] = datetime.utcnow().strftime("%Y-%m-%d")
+        await hub.cache.set("capabilities", caps)
+        return {"capability": capability_name, "status": "promoted"}
+
+    @router.put("/api/capabilities/{capability_name}/archive")
+    async def archive_capability(capability_name: str):
+        """Manually archive a capability."""
+        cached = await hub.cache.get("capabilities")
+        if not cached or not cached.get("data"):
+            raise HTTPException(status_code=404, detail="Capabilities not found")
+        caps = cached["data"]
+        if capability_name not in caps:
+            raise HTTPException(status_code=404, detail=f"Unknown capability: {capability_name}")
+        caps[capability_name]["status"] = "archived"
+        await hub.cache.set("capabilities", caps)
+        return {"capability": capability_name, "status": "archived"}
+
+    @router.get("/api/settings/discovery")
+    async def get_discovery_settings():
+        """Get current discovery settings."""
+        module = hub.modules.get("organic_discovery")
+        if not module:
+            return {"error": "Organic discovery module not loaded"}
+        return module.settings
+
+    @router.put("/api/settings/discovery")
+    async def update_discovery_settings(body: dict = Body(...)):
+        """Update discovery settings."""
+        module = hub.modules.get("organic_discovery")
+        if not module:
+            raise HTTPException(status_code=404, detail="Organic discovery module not loaded")
+        await module.update_settings(body)
+        return {"status": "updated", "settings": module.settings}
+
+    @router.post("/api/discovery/run")
+    async def trigger_discovery_run():
+        """Trigger an on-demand discovery run."""
+        module = hub.modules.get("organic_discovery")
+        if not module:
+            raise HTTPException(status_code=404, detail="Organic discovery module not loaded")
+        import asyncio
+        asyncio.create_task(module.run_discovery())
+        return {"status": "started"}
+
+    @router.get("/api/discovery/status")
+    async def get_discovery_status():
+        """Get discovery module status."""
+        module = hub.modules.get("organic_discovery")
+        if not module:
+            return {"loaded": False}
+        history = module.history
+        return {
+            "loaded": True,
+            "last_run": history[-1]["timestamp"] if history else None,
+            "total_runs": len(history),
+            "settings": module.settings,
+        }
+
     # Capability prediction toggle
     @router.put("/api/capabilities/{capability_name}/can-predict")
     async def toggle_can_predict(capability_name: str, body: dict = Body(...)):

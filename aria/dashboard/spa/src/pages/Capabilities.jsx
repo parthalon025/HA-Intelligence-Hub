@@ -4,8 +4,11 @@ import useComputed from '../hooks/useComputed.js';
 import { putJson } from '../api.js';
 import HeroCard from '../components/HeroCard.jsx';
 import PageBanner from '../components/PageBanner.jsx';
+import CollapsibleSection from '../components/CollapsibleSection.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
+import UsefulnessBar from '../components/UsefulnessBar.jsx';
+import CapabilityDetail from '../components/CapabilityDetail.jsx';
 
 /** Humanize a snake_case name: "power_monitoring" -> "Power monitoring" */
 function humanize(name) {
@@ -138,70 +141,174 @@ function PredictToggle({ name, canPredict, onToggle }) {
   );
 }
 
-function CapabilityCard({ name, capability, onTogglePredict }) {
+// ---------------------------------------------------------------------------
+// CapabilityCard — single capability in the grid
+// ---------------------------------------------------------------------------
+
+function CapabilityCard({ name, capability, onTogglePredict, onAction }) {
   const [expanded, setExpanded] = useState(false);
 
   const entities = capability.entities || [];
   const entityCount = capability.entity_count || entities.length;
   const canPredict = capability.can_predict ?? false;
-
-  // Collect detail fields (excluding can_predict — shown as toggle)
-  const details = Object.entries(capability).filter(
-    ([k]) => DETAIL_FIELDS.has(k)
-  );
-
-  const visibleEntities = expanded ? entities : entities.slice(0, 5);
-  const hasMore = entities.length > 5;
+  const usefulness = capability.usefulness ?? null;
+  const source = capability.source || null; // 'seed' | 'organic'
+  const layer = capability.layer || null;   // 'domain' | 'behavioral'
+  const status = capability.status || 'promoted';
+  const stabilityStreak = capability.stability_streak ?? null;
 
   return (
-    <div class="t-frame" data-label={humanize(name)} style="padding: 1rem;">
-      {/* Header */}
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-base font-bold" style="color: var(--text-primary)">{humanize(name)}</h3>
-        <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium" style="background: var(--accent-glow); color: var(--accent)">
-          {entityCount} {entityCount === 1 ? 'entity' : 'entities'}
-        </span>
+    <div
+      class="t-frame"
+      data-label={humanize(name)}
+      style="padding: 1rem; cursor: pointer;"
+      onClick={() => setExpanded(!expanded)}
+    >
+      {/* Header row: name + badges */}
+      <div class="flex items-center justify-between mb-2" style="flex-wrap: wrap; gap: 4px;">
+        <h3
+          class="text-base font-bold"
+          style="color: var(--text-primary); margin: 0;"
+        >
+          {humanize(name)}
+        </h3>
+        <div class="flex items-center gap-1" style="flex-wrap: wrap;">
+          {/* Entity count badge */}
+          <span
+            class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+            style="background: var(--accent-glow); color: var(--accent); white-space: nowrap;"
+          >
+            {entityCount} {entityCount === 1 ? 'entity' : 'entities'}
+          </span>
+
+          {/* Source badge */}
+          {source && (
+            <span
+              class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+              style={`white-space: nowrap; ${
+                source === 'organic'
+                  ? 'background: var(--status-healthy-glow); color: var(--status-healthy);'
+                  : 'background: var(--bg-surface-raised); color: var(--text-tertiary);'
+              }`}
+            >
+              {source}
+            </span>
+          )}
+
+          {/* Layer badge */}
+          {layer && (
+            <span
+              class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+              style={`white-space: nowrap; ${
+                layer === 'behavioral'
+                  ? 'background: color-mix(in srgb, var(--accent-purple) 15%, transparent); color: var(--accent-purple);'
+                  : 'background: var(--bg-surface-raised); color: var(--text-secondary);'
+              }`}
+            >
+              {layer}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Prediction toggle */}
-      <div class="mb-3 pb-3" style="border-bottom: 1px solid var(--border-subtle)">
-        <PredictToggle name={name} canPredict={canPredict} onToggle={onTogglePredict} />
-      </div>
-
-      {/* Detail fields */}
-      {details.length > 0 && (
-        <dl class="text-sm mb-3 space-y-1" style="color: var(--text-secondary)">
-          {details.map(([key, val]) => (
-            <div key={key} class="flex justify-between">
-              <dt style="color: var(--text-tertiary)">{humanize(key)}</dt>
-              <dd class="font-medium" style="color: var(--text-secondary)">{String(val)}</dd>
-            </div>
-          ))}
-        </dl>
+      {/* Usefulness bar */}
+      {usefulness != null && (
+        <div style="margin-bottom: 8px;">
+          <UsefulnessBar value={usefulness} label="Usefulness" />
+        </div>
       )}
 
-      {/* Entity list */}
-      {entities.length > 0 && (
-        <div>
-          <ul class="text-xs space-y-0.5" style="color: var(--text-tertiary)">
-            {visibleEntities.map((eid) => (
-              <li key={eid} class="truncate data-mono">{eid}</li>
-            ))}
-          </ul>
-          {hasMore && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              class="text-sm cursor-pointer mt-1"
-              style="color: var(--accent)"
-            >
-              {expanded ? 'Show less' : `Show all ${entities.length}`}
-            </button>
-          )}
+      {/* Stability streak for candidates */}
+      {status === 'candidate' && stabilityStreak != null && (
+        <div
+          style="font-size: var(--type-label); color: var(--text-tertiary); font-family: var(--font-mono); margin-bottom: 8px;"
+        >
+          Stability streak: <span style={`color: ${stabilityStreak >= 7 ? 'var(--status-healthy)' : 'var(--text-secondary)'};`}>{stabilityStreak}d</span>
+        </div>
+      )}
+
+      {/* Prediction toggle — only for promoted capabilities */}
+      {status === 'promoted' && (
+        <div
+          class="mb-2 pb-2"
+          style="border-bottom: 1px solid var(--border-subtle);"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <PredictToggle name={name} canPredict={canPredict} onToggle={onTogglePredict} />
+        </div>
+      )}
+
+      {/* Expanded detail view */}
+      {expanded && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <CapabilityDetail name={name} capability={capability} onAction={onAction} />
         </div>
       )}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Discovery status bar
+// ---------------------------------------------------------------------------
+
+function DiscoveryStatus({ data }) {
+  if (!data) return null;
+
+  const meta = data.discovery_metadata || data.metadata || {};
+  const lastRun = meta.last_organic_run || meta.last_run || null;
+  const autonomyMode = meta.autonomy_mode || null;
+  const namingBackend = meta.naming_backend || null;
+
+  if (!lastRun && !autonomyMode && !namingBackend) return null;
+
+  return (
+    <div
+      class="t-frame"
+      data-label="Discovery"
+      style="padding: 0.75rem;"
+    >
+      <div class="flex items-center gap-4" style="flex-wrap: wrap; font-size: var(--type-label); font-family: var(--font-mono);">
+        {lastRun && (
+          <span style="color: var(--text-secondary);">
+            Last run: <span style="color: var(--text-primary);">{formatTimestamp(lastRun)}</span>
+          </span>
+        )}
+        {autonomyMode && (
+          <span style="color: var(--text-secondary);">
+            Mode: <span style="color: var(--accent);">{autonomyMode}</span>
+          </span>
+        )}
+        {namingBackend && (
+          <span style="color: var(--text-secondary);">
+            Naming: <span style="color: var(--text-primary);">{namingBackend}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatTimestamp(iso) {
+  if (!iso) return '\u2014';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main Capabilities page
+// ---------------------------------------------------------------------------
 
 export default function Capabilities() {
   const { data, loading, error, refetch } = useCache('capabilities');
@@ -212,13 +319,22 @@ export default function Capabilities() {
     return Object.entries(inner).map(([name, cap]) => ({ name, ...cap }));
   }, [data]);
 
+  // Split into status groups
+  const promoted = useComputed(() => {
+    return capabilities.filter((c) => c.status === 'promoted' || !c.status);
+  }, [capabilities]);
+
+  const candidates = useComputed(() => {
+    return capabilities.filter((c) => c.status === 'candidate');
+  }, [capabilities]);
+
+  const archived = useComputed(() => {
+    return capabilities.filter((c) => c.status === 'archived');
+  }, [capabilities]);
+
   // Total entity count across all capabilities
   const totalEntities = useComputed(() => {
     return capabilities.reduce((sum, cap) => sum + (cap.entity_count || (cap.entities || []).length), 0);
-  }, [capabilities]);
-
-  const predictableCount = useComputed(() => {
-    return capabilities.filter((c) => c.can_predict).length;
   }, [capabilities]);
 
   async function handleTogglePredict(capName, newValue) {
@@ -229,6 +345,12 @@ export default function Capabilities() {
       console.error('Failed to toggle can_predict:', err);
     }
   }
+
+  function handleAction() {
+    refetch();
+  }
+
+  const heroDelta = `${promoted.length} promoted \u00B7 ${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} \u00B7 ${totalEntities} entities`;
 
   if (loading && !data) {
     return (
@@ -252,31 +374,102 @@ export default function Capabilities() {
     <div class="space-y-6 animate-page-enter">
       <PageBanner page="CAPABILITIES" subtitle="Detected home capabilities and features." />
 
-      {/* Hero — what ARIA can measure */}
+      {/* Hero — total capabilities */}
       <HeroCard
         value={capabilities.length}
         label="capabilities"
-        delta={`${predictableCount} predictable \u00B7 ${totalEntities} entities`}
+        delta={heroDelta}
         loading={loading}
       />
+
+      {/* Discovery status bar */}
+      <DiscoveryStatus data={data} />
 
       {/* Explanation */}
       <div class="t-callout p-3 text-sm" style="color: var(--text-secondary); line-height: 1.5;">
         ARIA automatically detects what your home can do by scanning your entities.
         Each capability can be toggled for <strong style="color: var(--text-primary)">predictions</strong> — when enabled, ARIA learns
-        the patterns for that capability and flags when something changes. Start with the defaults and
-        enable more as you see how your home's patterns look.
+        the patterns for that capability and flags when something changes. Organic discovery
+        finds new groupings automatically; candidates are promoted once they prove stable.
       </div>
 
       {capabilities.length === 0 ? (
         <div class="t-callout" style="padding: 0.75rem;">
-          <span class="text-sm" style="color: var(--text-secondary)">No capabilities detected yet. Capabilities are identified during discovery by matching entity domains and device classes. They appear after the first successful discovery scan.</span>
+          <span class="text-sm" style="color: var(--text-secondary)">
+            No capabilities detected yet. Capabilities are identified during discovery by matching
+            entity domains and device classes. They appear after the first successful discovery scan.
+          </span>
         </div>
       ) : (
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 stagger-children">
-          {capabilities.map((cap) => (
-            <CapabilityCard key={cap.name} name={cap.name} capability={cap} onTogglePredict={handleTogglePredict} />
-          ))}
+        <div class="space-y-6">
+          {/* Promoted section */}
+          {promoted.length > 0 && (
+            <CollapsibleSection
+              title="Promoted"
+              subtitle="Active capabilities tracked by ARIA."
+              summary={`${promoted.length} capabilities`}
+              defaultOpen={true}
+              loading={loading}
+            >
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 stagger-children">
+                {promoted.map((cap) => (
+                  <CapabilityCard
+                    key={cap.name}
+                    name={cap.name}
+                    capability={cap}
+                    onTogglePredict={handleTogglePredict}
+                    onAction={handleAction}
+                  />
+                ))}
+              </div>
+            </CollapsibleSection>
+          )}
+
+          {/* Candidates section */}
+          {candidates.length > 0 && (
+            <CollapsibleSection
+              title="Candidates"
+              subtitle="Organically discovered capabilities awaiting promotion."
+              summary={`${candidates.length} candidates`}
+              defaultOpen={true}
+              loading={loading}
+            >
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 stagger-children">
+                {candidates.map((cap) => (
+                  <CapabilityCard
+                    key={cap.name}
+                    name={cap.name}
+                    capability={cap}
+                    onTogglePredict={handleTogglePredict}
+                    onAction={handleAction}
+                  />
+                ))}
+              </div>
+            </CollapsibleSection>
+          )}
+
+          {/* Archived section */}
+          {archived.length > 0 && (
+            <CollapsibleSection
+              title="Archived"
+              subtitle="Capabilities removed from active tracking."
+              summary={`${archived.length} archived`}
+              defaultOpen={false}
+              loading={loading}
+            >
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 stagger-children">
+                {archived.map((cap) => (
+                  <CapabilityCard
+                    key={cap.name}
+                    name={cap.name}
+                    capability={cap}
+                    onTogglePredict={handleTogglePredict}
+                    onAction={handleAction}
+                  />
+                ))}
+              </div>
+            </CollapsibleSection>
+          )}
         </div>
       )}
     </div>
