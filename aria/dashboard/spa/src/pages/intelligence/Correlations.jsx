@@ -77,7 +77,10 @@ export function Correlations({ correlations }) {
       {!hasData ? (
         <Callout>No correlations yet. Needs enough data to detect statistically reliable relationships between devices.</Callout>
       ) : (
-        <MatrixHeatmap correlations={correlations} />
+        <>
+          <p class="text-xs" style="color: var(--text-tertiary)">This grid shows which devices tend to change at the same time. Blue means they move together (both turn on/off). Purple means they move opposite (one on, the other off). Faded cells are too weak to matter. Numbers closer to 1.0 or -1.0 are stronger relationships.</p>
+          <MatrixHeatmap correlations={correlations} />
+        </>
       )}
     </Section>
   );

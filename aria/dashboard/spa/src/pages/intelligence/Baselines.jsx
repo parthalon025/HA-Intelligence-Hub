@@ -90,6 +90,7 @@ export function Baselines({ baselines }) {
       subtitle="This is 'normal' for each day of the week. The system flags deviations from these averages. More samples = tighter predictions."
       summary={Object.keys(baselines).length + " days"}
     >
+      <p class="text-xs" style="color: var(--text-tertiary)">Each cell shows what's typical for that day and metric. Darker color = higher value. Hover any cell to see the exact number with its margin of error. The 'n' column is how many readings were averaged.</p>
       <div class="t-frame" data-label="baselines">
         {/* Heatmap grid */}
         <div
@@ -157,6 +158,22 @@ export function Baselines({ baselines }) {
               </div>,
             ];
           })}
+        </div>
+        {/* Legend */}
+        <div class="flex flex-wrap items-center gap-3 mt-2 pt-2" style="border-top: 1px solid var(--border-subtle); font-size: var(--type-micro); color: var(--text-tertiary); padding: 0 0.5rem 0.5rem;">
+          <div class="flex items-center gap-1">
+            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: var(--accent); opacity: 0.2;" />
+            <span>Low</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: var(--accent); opacity: 0.65;" />
+            <span>High</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: var(--status-error); opacity: 0.65;" />
+            <span>High unavail (bad)</span>
+          </div>
+          <span style="color: var(--accent);">\u25C0 today</span>
         </div>
       </div>
     </Section>

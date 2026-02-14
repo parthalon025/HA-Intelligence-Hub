@@ -194,8 +194,20 @@ function DailyTrend({ trend, pipeline }) {
   return (
     <section class="space-y-3">
       <h2 class="text-lg font-bold" style="color: var(--text-primary)">Daily Trend</h2>
+      <p class="text-xs" style="color: var(--text-tertiary)">How accurate are ARIA's predictions over time? The line smooths out daily swings to show the real trend. Higher = better guesses.</p>
       <div class="t-frame" data-label="accuracy trend" style="padding: 1rem;">
         <TimeChart data={chartData} series={chartSeries} height={160} />
+        {/* Legend */}
+        <div class="flex flex-wrap items-center gap-3 mt-2 pt-2" style="border-top: 1px solid var(--border-subtle); font-size: var(--type-micro); color: var(--text-tertiary);">
+          <div class="flex items-center gap-1">
+            <span style="display: inline-block; width: 16px; height: 2px; background: var(--accent);" />
+            <span>7-day rolling accuracy</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span style="display: inline-block; width: 16px; height: 2px; background: var(--text-tertiary);" />
+            <span>Predictions per day</span>
+          </div>
+        </div>
         {thresholdPct != null && (
           <p class="text-xs mt-2" style="color: var(--text-tertiary)">
             Gate threshold: <span style="color: var(--accent); font-weight: 600;">{thresholdPct}%</span> {gate.label} required to advance to {gate.nextStage}

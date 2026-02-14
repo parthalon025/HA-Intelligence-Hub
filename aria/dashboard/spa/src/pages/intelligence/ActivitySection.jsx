@@ -43,6 +43,7 @@ function SwimLaneTimeline({ events }) {
 
   return (
     <div class="t-frame p-4" data-label="swim lanes">
+      <p class="text-xs mb-2" style="color: var(--text-tertiary)">What happened in the last hour, organized by device type. Each dot is one state change. Hover a dot to see which device changed.</p>
       <div style="display: grid; grid-template-columns: 60px 1fr; gap: 0;">
         {domainKeys.map(domain => (
           <div key={domain} style="display: contents;">
@@ -82,6 +83,19 @@ function SwimLaneTimeline({ events }) {
         <div style="height: 14px; position: relative; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-tertiary);">
           <span>{startLabel}</span>
           <span>now</span>
+        </div>
+      </div>
+      {/* Legend */}
+      <div class="flex flex-wrap items-center gap-3 mt-2 pt-2" style="border-top: 1px solid var(--border-subtle); font-size: 10px; color: var(--text-tertiary);">
+        {domainKeys.map(domain => (
+          <div key={domain} class="flex items-center gap-1">
+            <span style={`display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${DOMAIN_COLORS[domain] || 'var(--text-tertiary)'};`} />
+            <span>{DOMAIN_LABELS[domain] || domain}</span>
+          </div>
+        ))}
+        <div class="flex items-center gap-1">
+          <span style="display: inline-block; width: 1px; height: 10px; border-left: 2px dashed var(--text-tertiary); opacity: 0.5;" />
+          <span>Now</span>
         </div>
       </div>
     </div>
