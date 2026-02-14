@@ -71,17 +71,18 @@ class TestReferenceModel:
         assert "interpretation" in result
 
     async def test_comparison_trend_values(self):
-        """Trend values should reflect first-to-last delta."""
+        """Trend values should reflect mean-of-halves delta."""
         from aria.modules.intelligence import compare_model_accuracy
 
+        # [80, 75, 70, 65]: first half mean=77.5, second half mean=67.5, delta=-10
         result = compare_model_accuracy(
             primary_acc=[80, 75, 70, 65],
             reference_acc=[80, 80, 80, 80],
             threshold_pct=5.0,
         )
-        assert result["primary_trend"] == -15.0
+        assert result["primary_trend"] == -10.0
         assert result["reference_trend"] == 0.0
-        assert result["divergence_pct"] == 15.0
+        assert result["divergence_pct"] == 10.0
 
     async def test_short_lists_treated_as_stable(self):
         """Single-element lists should produce zero delta (stable)."""

@@ -49,7 +49,11 @@ ROLLING_WINDOWS_HOURS = [1, 3, 6]
 
 
 def should_full_retrain(current_trees: int, max_trees: int = 500) -> bool:
-    """Check if model has exceeded tree cap and needs full retrain."""
+    """Check if model has exceeded tree cap and needs full retrain.
+
+    Phase 2: Wire into _train_model_for_target() to gate incremental vs full
+    retrain based on config['incremental.max_total_trees'].
+    """
     return current_trees > max_trees
 
 
@@ -1243,7 +1247,9 @@ class MLEngine(Module):
         Maintains a parallel unmodified model to distinguish meta-learner
         errors from genuine behavioral drift.
         """
-        pass  # Full implementation in later iteration
+        pass  # Phase 2: Wire into retrain cycle to train parallel model with
+        # frozen feature config.  compare_model_accuracy() in intelligence.py
+        # provides the comparison logic once both model sets exist.
 
     async def on_event(self, event_type: str, data: Dict[str, Any]):
         """Handle hub events.

@@ -59,6 +59,10 @@ def mrmr_select(
 
     relevance = mutual_info_regression(X, y, random_state=42)
 
+    # Pre-compute full absolute correlation matrix once (avoids O(k*n) per-pair calls)
+    corr_matrix = np.abs(np.corrcoef(X.T))
+    corr_matrix = np.nan_to_num(corr_matrix, nan=0.0)
+
     # Step 2: Greedy forward selection
     selected_indices: List[int] = []
     remaining = set(range(n_features))
@@ -72,15 +76,7 @@ def mrmr_select(
 
             # Compute redundancy: mean |corr| with already-selected features
             if selected_indices:
-                correlations = np.array(
-                    [
-                        np.abs(np.corrcoef(X[:, idx], X[:, s])[0, 1])
-                        for s in selected_indices
-                    ]
-                )
-                # Handle NaN correlations (constant columns)
-                correlations = np.nan_to_num(correlations, nan=0.0)
-                redundancy = correlations.mean()
+                redundancy = corr_matrix[idx, selected_indices].mean()
             else:
                 redundancy = 0.0
 

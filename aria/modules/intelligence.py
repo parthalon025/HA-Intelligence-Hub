@@ -42,8 +42,18 @@ def compare_model_accuracy(
         interpretation (one of: behavioral_drift, meta_learner_error,
         meta_learner_improvement, stable).
     """
-    primary_delta = primary_acc[-1] - primary_acc[0] if len(primary_acc) >= 2 else 0.0
-    reference_delta = reference_acc[-1] - reference_acc[0] if len(reference_acc) >= 2 else 0.0
+    # Use mean-of-halves for robust trend detection (endpoint-only comparison
+    # masks mid-series dips like [80, 60, 80] → delta=0)
+    if len(primary_acc) >= 2:
+        mid = len(primary_acc) // 2
+        primary_delta = (sum(primary_acc[mid:]) / len(primary_acc[mid:])) - (sum(primary_acc[:mid]) / mid)
+    else:
+        primary_delta = 0.0
+    if len(reference_acc) >= 2:
+        mid = len(reference_acc) // 2
+        reference_delta = (sum(reference_acc[mid:]) / len(reference_acc[mid:])) - (sum(reference_acc[:mid]) / mid)
+    else:
+        reference_delta = 0.0
 
     primary_degraded = primary_delta < -threshold_pct
     reference_degraded = reference_delta < -threshold_pct

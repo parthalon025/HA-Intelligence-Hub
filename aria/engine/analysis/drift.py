@@ -170,6 +170,9 @@ class ADWINDetector:
         """Run ADWIN over a series of values for a given metric.
 
         Creates a fresh ADWIN instance (does not affect persistent state).
+        This is intentional: the batch drift check runs over historical
+        prediction errors accumulated since last check.  For streaming
+        detection, use update() with persistent detectors via get_stats().
 
         Args:
             metric_name: Name of the metric.
