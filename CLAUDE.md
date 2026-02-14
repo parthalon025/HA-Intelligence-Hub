@@ -156,69 +156,22 @@ aria/
 **Stack:** Preact 10 + @preact/signals + Tailwind CSS v4 + uPlot, bundled with esbuild
 **Location:** `aria/dashboard/spa/`
 **Design language:** `docs/design-language.md` — MUST READ before creating or modifying UI components
-**Design doc:** `docs/plans/2026-02-13-aria-ui-redesign-design.md`
-**Pages (13):** Home (pipeline flowchart), Discovery, Capabilities, Data Curation, Intelligence, Predictions, Patterns, Shadow Mode, ML Engine (feature selection, model health), Automations, Settings, Guide (onboarding)
-**Sidebar:** 3 responsive variants — phone bottom tab bar (<640px), tablet icon rail (640-1023px), desktop full sidebar (1024px+). Organized by pipeline stage.
-**Logo:** SVG pixel-art component (`AriaLogo.jsx`) matching README ASCII art
+**Full component reference:** `docs/dashboard-components.md`
+**Pages (13):** Home, Discovery, Capabilities, Data Curation, Intelligence, Predictions, Patterns, Shadow Mode, ML Engine, Automations, Settings, Guide
 
 #### Build & CSS
 
 ```bash
 # Rebuild SPA after JSX changes (REQUIRED — dist/bundle.js is gitignored)
 cd aria/dashboard/spa && npm run build
-
-# Or just JS (faster, skip Tailwind rebuild)
-cd aria/dashboard/spa && npx esbuild src/index.jsx --bundle --outfile=dist/bundle.js \
-  --jsx-factory=h --jsx-fragment=Fragment --inject:src/preact-shim.js \
-  --loader:.jsx=jsx --minify
 ```
 
 **CSS rules:**
 - All colors via CSS custom properties in `index.css` — NEVER hardcode hex values in JSX
 - Use `.t-frame` with `data-label` for content cards (NOT `.t-card` — legacy)
 - Use `class` attribute (Preact), NOT `className`
-- Tailwind via pre-built `bundle.css` — arbitrary values (e.g. `z-29`) may not exist. Use inline `style` for non-standard values.
+- Tailwind via pre-built `bundle.css` — arbitrary values may not exist. Use inline `style` for non-standard values.
 - uPlot renders on `<canvas>` — CSS variables must be resolved via `getComputedStyle()` before passing to uPlot
-
-#### Reusable Components
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| `PageBanner` | `components/PageBanner.jsx` | ASCII pixel-art "ARIA + PAGE_NAME" header — first element on every page |
-| `CollapsibleSection` | `components/CollapsibleSection.jsx` | Expand/collapse with cursor-as-affordance (cursor-active/working/idle) |
-| `HeroCard` | `components/HeroCard.jsx` | Large monospace KPI with optional sparkline (`sparkData`/`sparkColor` props) |
-| `TimeChart` | `components/TimeChart.jsx` | uPlot wrapper — full mode (`<figure>`) or `compact` sparkline mode (no axes) |
-| `StatsGrid` | `components/StatsGrid.jsx` | Grid of labeled values with `.t-bracket` labels |
-| `AriaLogo` | `components/AriaLogo.jsx` | SVG pixel-art logo |
-| `UsefulnessBar` | `components/UsefulnessBar.jsx` | Horizontal percentage bar with color thresholds (green/orange/red) |
-| `CapabilityDetail` | `components/CapabilityDetail.jsx` | Expanded capability view: 5 usefulness bars, metadata, temporal patterns, entity list |
-| `DiscoverySettings` | `components/DiscoverySettings.jsx` | Settings panel: autonomy mode, naming backend, thresholds, Save/Run Now |
-
-#### Page Data Sources
-
-**Home page** — Interactive 3-lane pipeline dashboard (Data Collection → Learning → Actions) with 9 module nodes, cursor-state indicators, "YOU" guidance nodes, journey progress bar, and live metrics strip.
-**Data sources** (7, fetched in parallel): `/health`, `/api/cache/intelligence`, `/api/cache/activity_summary`, `/api/cache/entities`, `/api/shadow/accuracy`, `/api/pipeline`, `/api/curation/summary`
-
-#### Intelligence Sub-Components
-
-Located in `aria/dashboard/spa/src/pages/intelligence/`:
-
-| Component | What it shows |
-|-----------|---------------|
-| `LearningProgress` | Data maturity bar (collecting → baselines → ML training → ML active) |
-| `HomeRightNow` | Current intraday metrics vs baselines with color-coded deltas |
-| `ActivitySection` | Activity monitor: swim-lane timeline, occupancy, event rates, patterns, anomalies, WS health |
-| `TrendsOverTime` | 30-day small multiples (one chart per metric) + intraday charts |
-| `PredictionsVsActuals` | Predicted vs actual metric comparison |
-| `Baselines` | Day × metric heatmap grid with color intensity = value |
-| `DailyInsight` | LLM-generated daily insight text |
-| `Correlations` | Diverging-color correlation matrix heatmap (positive=accent, negative=purple) |
-| `SystemStatus` | Run log, ML model scores (R2/MAE), meta-learning applied suggestions |
-| `Configuration` | Current intelligence engine config (deprecated — replaced by Settings page) |
-| `DriftStatus` | Per-metric drift detection status (Page-Hinkley + ADWIN scores) |
-| `AnomalyAlerts` | IsolationForest + autoencoder anomaly alerts |
-| `ShapAttributions` | SHAP feature attribution horizontal bar chart |
-| `utils.jsx` | Shared helpers: Section, Callout, durationSince, describeEvent, EVENT_ICONS, DOMAIN_LABELS |
 
 ### Activity Monitor — Prediction Analytics
 
@@ -233,57 +186,40 @@ Four analytical methods computed on each 15-min flush and cached in `activity_su
 
 ## Testing
 
+### Pipeline Verification (after deployment or feature changes)
+
+ARIA has the deepest pipeline — engine→JSON files→hub cache→API→WebSocket→dashboard. Unit tests cover each layer but not the flow between them. After any deployment or feature change, run dual-axis tests:
+
+**Horizontal:** Hit every API endpoint (`/api/cache/{category}` for all 8 categories, `/api/shadow/accuracy`, `/api/pipeline`, `/api/ml/*`, `/api/capabilities/*`, `/api/config`, `/api/curation/summary`). Confirm each returns expected shape with real data.
+
+**Vertical:** Trigger one engine command (e.g., `aria snapshot-intraday`), then trace:
+```
+aria snapshot-intraday →
+  JSON file written to ~/ha-logs/intelligence/ →
+    hub intelligence module reads it into cache →
+      GET /api/cache/intelligence returns new data →
+        WebSocket pushes update →
+          Dashboard renders updated values
+```
+
+See: `~/Documents/docs/lessons/2026-02-15-horizontal-vertical-pipeline-testing.md`
+
+### Unit Tests
+
 ```bash
-# Run all tests (~973 tests)
+# All tests (~973)
 .venv/bin/python -m pytest tests/ -v
 
-# Test suites by area
-.venv/bin/python -m pytest tests/hub/ -v         # Hub tests (~544 tests)
-.venv/bin/python -m pytest tests/engine/ -v       # Engine tests (177 tests)
-.venv/bin/python -m pytest tests/integration/ -v  # Integration tests (9 tests)
+# By suite
+.venv/bin/python -m pytest tests/hub/ -v         # Hub (~544 tests)
+.venv/bin/python -m pytest tests/engine/ -v       # Engine (177 tests)
+.venv/bin/python -m pytest tests/integration/ -v  # Integration (9 tests)
 
-# Individual hub test files
-.venv/bin/python -m pytest tests/hub/test_activity_monitor.py -v
-.venv/bin/python -m pytest tests/hub/test_intelligence.py -v
-.venv/bin/python -m pytest tests/hub/test_shadow_engine.py -v
-.venv/bin/python -m pytest tests/hub/test_ml_training.py -v
-.venv/bin/python -m pytest tests/hub/test_cache_shadow.py -v
-.venv/bin/python -m pytest tests/hub/test_api_shadow.py -v
-.venv/bin/python -m pytest tests/hub/test_api_config.py -v
-.venv/bin/python -m pytest tests/hub/test_cache_config.py -v
-.venv/bin/python -m pytest tests/hub/test_config_defaults.py -v
-.venv/bin/python -m pytest tests/hub/test_data_quality.py -v
-.venv/bin/python -m pytest tests/hub/test_discover.py -v
-.venv/bin/python -m pytest tests/hub/test_patterns.py -v
-.venv/bin/python -m pytest tests/hub/test_integration.py -v
-
-# Organic discovery tests (148 tests across 8 files)
-.venv/bin/python -m pytest tests/hub/test_organic_feature_vectors.py -v
-.venv/bin/python -m pytest tests/hub/test_organic_clustering.py -v
-.venv/bin/python -m pytest tests/hub/test_organic_seed_validation.py -v
-.venv/bin/python -m pytest tests/hub/test_organic_scoring.py -v
-.venv/bin/python -m pytest tests/hub/test_organic_naming.py -v
-.venv/bin/python -m pytest tests/hub/test_organic_behavioral.py -v
-.venv/bin/python -m pytest tests/hub/test_organic_discovery_module.py -v
-.venv/bin/python -m pytest tests/hub/test_api_organic_discovery.py -v
-.venv/bin/python -m pytest tests/integration/test_organic_discovery_integration.py -v
-
-# Individual engine test files
-.venv/bin/python -m pytest tests/engine/test_models.py -v
-.venv/bin/python -m pytest tests/engine/test_predictions.py -v
-.venv/bin/python -m pytest tests/engine/test_features.py -v
-.venv/bin/python -m pytest tests/engine/test_collectors.py -v
-.venv/bin/python -m pytest tests/engine/test_analysis.py -v
-.venv/bin/python -m pytest tests/engine/test_cli.py -v
-.venv/bin/python -m pytest tests/engine/test_storage.py -v
-.venv/bin/python -m pytest tests/engine/test_llm.py -v
-.venv/bin/python -m pytest tests/engine/test_automation_suggestions.py -v
-.venv/bin/python -m pytest tests/engine/test_drift.py -v
-.venv/bin/python -m pytest tests/engine/test_entity_correlations.py -v
-.venv/bin/python -m pytest tests/engine/test_occupancy.py -v
-.venv/bin/python -m pytest tests/engine/test_power_profiles.py -v
-.venv/bin/python -m pytest tests/engine/test_prophet.py -v
-.venv/bin/python -m pytest tests/engine/test_sequence_anomalies.py -v
+# By feature area (use -k for keyword filtering)
+.venv/bin/python -m pytest tests/hub/ -k "organic" -v       # Organic discovery (148 tests)
+.venv/bin/python -m pytest tests/hub/ -k "shadow" -v        # Shadow mode
+.venv/bin/python -m pytest tests/hub/ -k "activity" -v      # Activity monitor
+.venv/bin/python -m pytest tests/hub/ -k "data_quality" -v  # Data quality/curation
 ```
 
 ## Environment
@@ -316,72 +252,11 @@ Separated by design: state_changed volume would drown registry events. Each has 
 
 **Noise suppression:** unavailable↔unknown transitions, same-state-to-same-state
 
-### Shadow Mode API
+### API Reference
 
-```bash
-# Predictions with outcomes
-curl -s http://127.0.0.1:8001/api/shadow/predictions?limit=10 | python3 -m json.tool
+Full curl examples for all endpoints: `docs/api-reference.md`
 
-# Accuracy metrics
-curl -s http://127.0.0.1:8001/api/shadow/accuracy | python3 -m json.tool
-
-# High-confidence disagreements (most informative wrong predictions)
-curl -s http://127.0.0.1:8001/api/shadow/disagreements | python3 -m json.tool
-
-# Pipeline stage progression
-curl -s http://127.0.0.1:8001/api/pipeline | python3 -m json.tool
-
-# Pipeline control (advance/retreat with gate validation)
-curl -s -X POST http://127.0.0.1:8001/api/pipeline/advance -H 'Content-Type: application/json' -d '{}'
-curl -s -X POST http://127.0.0.1:8001/api/pipeline/retreat -H 'Content-Type: application/json' -d '{}'
-```
-
-### ML Feature Data API
-
-```bash
-# ML feature data
-curl -s http://127.0.0.1:8001/api/ml/drift | python3 -m json.tool
-curl -s http://127.0.0.1:8001/api/ml/features | python3 -m json.tool
-curl -s http://127.0.0.1:8001/api/ml/models | python3 -m json.tool
-curl -s http://127.0.0.1:8001/api/ml/anomalies | python3 -m json.tool
-curl -s http://127.0.0.1:8001/api/ml/shap | python3 -m json.tool
-curl -s http://127.0.0.1:8001/api/shadow/propagation | python3 -m json.tool
-```
-
-### Organic Discovery API
-
-```bash
-# Candidate capabilities (discovered but not promoted)
-curl -s http://127.0.0.1:8001/api/capabilities/candidates | python3 -m json.tool
-
-# Discovery run history
-curl -s http://127.0.0.1:8001/api/capabilities/history | python3 -m json.tool
-
-# Promote/archive a capability
-curl -s -X PUT http://127.0.0.1:8001/api/capabilities/kitchen_lights/promote
-curl -s -X PUT http://127.0.0.1:8001/api/capabilities/kitchen_lights/archive
-
-# Discovery settings (autonomy mode, naming backend, thresholds)
-curl -s http://127.0.0.1:8001/api/settings/discovery | python3 -m json.tool
-curl -s -X PUT http://127.0.0.1:8001/api/settings/discovery -H 'Content-Type: application/json' \
-  -d '{"autonomy_mode": "auto_promote"}'
-
-# Trigger on-demand discovery run
-curl -s -X POST http://127.0.0.1:8001/api/discovery/run
-
-# Discovery module status
-curl -s http://127.0.0.1:8001/api/discovery/status | python3 -m json.tool
-```
-
-### Phase 2 Config & Curation API
-
-```bash
-# All config parameters with metadata
-curl -s http://127.0.0.1:8001/api/config | python3 -m json.tool
-
-# Entity curation summary (tier/status counts)
-curl -s http://127.0.0.1:8001/api/curation/summary | python3 -m json.tool
-```
+Key endpoints: `/api/cache/{category}`, `/api/shadow/accuracy`, `/api/pipeline`, `/api/ml/*`, `/api/capabilities/*`, `/api/config`, `/api/curation/summary`
 
 ## HA Data Model
 
