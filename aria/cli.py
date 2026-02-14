@@ -250,6 +250,15 @@ def _serve(host: str, port: int, log_level: str = "INFO"):
         except Exception as e:
             logger.warning(f"Data quality module failed (non-fatal): {e}")
 
+        # organic_discovery (non-fatal)
+        try:
+            from aria.modules.organic_discovery.module import OrganicDiscoveryModule
+            organic_discovery = OrganicDiscoveryModule(hub)
+            hub.register_module(organic_discovery)
+            await _init_module(organic_discovery, "organic_discovery")()
+        except Exception as e:
+            logger.warning(f"Organic discovery module failed (non-fatal): {e}")
+
         # intelligence (non-fatal)
         intel_mod = IntelligenceModule(hub, intelligence_dir)
         hub.register_module(intel_mod)
