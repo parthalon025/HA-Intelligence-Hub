@@ -41,6 +41,15 @@ def main():
     serve_parser.add_argument("--verbose", action="store_true", help="Enable DEBUG logging")
     serve_parser.add_argument("--quiet", action="store_true", help="Only show WARNING and above")
 
+    # Demo command
+    demo_parser = subparsers.add_parser("demo", help="Generate synthetic demo data for visual testing")
+    demo_parser.add_argument("--scenario", default="stable_couple", help="Household scenario (default: stable_couple)")
+    demo_parser.add_argument("--days", type=int, default=30, help="Days to simulate (default: 30)")
+    demo_parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    demo_parser.add_argument("--checkpoint", type=str, default=None, help="Load a frozen checkpoint directory instead of generating")
+    demo_parser.add_argument("--port", type=int, default=8001, help="Port for hub (default: 8001)")
+    demo_parser.add_argument("--output-dir", type=str, default=None, help="Output directory (default: temp directory)")
+
     # Status command
     status_parser = subparsers.add_parser("status", help="Show ARIA hub status")
     status_parser.add_argument("--json", action="store_true", dest="json_output", help="Output as JSON")
@@ -103,6 +112,9 @@ def _dispatch(args):
         elif args.quiet:
             log_level = "WARNING"
         _serve(args.host, args.port, log_level)
+
+    elif args.command == "demo":
+        _demo(args)
 
     elif args.command == "status":
         _status(json_output=args.json_output)
@@ -282,6 +294,46 @@ def _serve(host: str, port: int, log_level: str = "INFO"):
                 await hub.shutdown()
 
     asyncio.run(start())
+
+
+def _demo(args):
+    """Generate or load synthetic demo data for visual testing."""
+    from pathlib import Path
+    import tempfile
+
+    if args.checkpoint:
+        data_dir = Path(args.checkpoint)
+        if not data_dir.exists():
+            print(f"Error: checkpoint directory not found: {data_dir}")
+            sys.exit(1)
+        print(f"Using checkpoint: {data_dir}")
+    else:
+        output_dir = Path(args.output_dir) if args.output_dir else Path(tempfile.mkdtemp(prefix="aria-demo-"))
+        print(f"Generating {args.days}-day '{args.scenario}' scenario (seed={args.seed})...")
+
+        from tests.demo.generate import generate_checkpoint
+
+        result = generate_checkpoint(
+            scenario=args.scenario,
+            days=args.days,
+            seed=args.seed,
+            output_dir=output_dir,
+        )
+        data_dir = output_dir
+        print(f"Generated {result['snapshots_saved']} snapshots")
+        print(f"  Training metrics: {len(result.get('training', {}))}")
+        print(f"  Predictions: {len(result.get('predictions', {}))}")
+
+    print(f"\nDemo data directory: {data_dir}")
+    print(f"\nTo start the hub with this data, point intelligence_dir at:")
+    print(f"  {data_dir}")
+    print(f"\nContents:")
+    for child in sorted(data_dir.iterdir()):
+        if child.is_dir():
+            count = len(list(child.iterdir()))
+            print(f"  {child.name}/ ({count} files)")
+        else:
+            print(f"  {child.name}")
 
 
 def _status(json_output: bool = False):
