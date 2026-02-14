@@ -77,7 +77,7 @@ function FeatureSelection({ features, loading }) {
       loading={loading}
     >
       {isEmpty ? (
-        <Callout>Feature selection activates after the first ML training cycle.</Callout>
+        <Callout>Feature selection data is not yet available. It will populate once ML models are trained and mRMR feature ranking is computed.</Callout>
       ) : (
         <div class="space-y-4">
           <HeroCard
@@ -141,7 +141,7 @@ function ModelHealth({ models, loading }) {
       loading={loading}
     >
       {isEmpty ? (
-        <Callout>Model health data appears after the first training cycle.</Callout>
+        <Callout>Model health data is not yet available. It will populate once ML models are trained and reference model comparison is active.</Callout>
       ) : (
         <div class="space-y-4">
           {/* Reference model comparison */}
@@ -167,7 +167,7 @@ function ModelHealth({ models, loading }) {
                 </div>
                 <div class="t-frame" data-label="Divergence">
                   <span class="data-mono" style="font-size: var(--type-headline); color: var(--text-primary);">
-                    {reference.divergence != null ? formatPct(reference.divergence) : '\u2014'}
+                    {(reference.divergence ?? reference.divergence_pct) != null ? formatPct(reference.divergence ?? reference.divergence_pct) : '\u2014'}
                   </span>
                 </div>
               </div>
@@ -243,7 +243,7 @@ function TrainingHistory({ models, loading }) {
       loading={loading}
     >
       {isEmpty ? (
-        <Callout>Training history will populate after the first ML training cycle.</Callout>
+        <Callout>Training history is not yet available. It will populate after ARIA completes its first model training run.</Callout>
       ) : (
         <div class="space-y-4">
           {lastTrained && (

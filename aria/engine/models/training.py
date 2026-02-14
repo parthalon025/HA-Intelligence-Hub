@@ -65,6 +65,29 @@ def train_all_models(days=90, config=None, store=None):
     anomaly_result = iso_model.train(feature_names, X, models_dir)
     results["models"]["anomaly_detector"] = anomaly_result
 
+    # Persist anomaly detector status for intelligence module / dashboard
+    intel_dir = os.path.dirname(models_dir)  # intelligence_dir is parent of models/
+    try:
+        iso_status = {
+            "samples": anomaly_result.get("samples", 0),
+            "contamination": anomaly_result.get("contamination", 0.05),
+            "autoencoder_enabled": anomaly_result.get("autoencoder_enabled", False),
+        }
+        iso_status_path = os.path.join(models_dir, "isolation_forest_status.json")
+        with open(iso_status_path, "w") as f:
+            json.dump(iso_status, f, indent=2)
+        if anomaly_result.get("autoencoder_enabled"):
+            ae_status = {
+                "enabled": True,
+                "samples": anomaly_result.get("ae_samples", anomaly_result.get("samples", 0)),
+                "hidden_layers": anomaly_result.get("hidden_layers", []),
+            }
+            ae_status_path = os.path.join(models_dir, "autoencoder_status.json")
+            with open(ae_status_path, "w") as f:
+                json.dump(ae_status, f, indent=2)
+    except Exception:
+        pass  # Non-critical — dashboard status only
+
     # Train device failure model (uses daily snapshots for longer history)
     daily_snaps = store.load_recent_snapshots(days)
     failure_result = train_device_failure_model(daily_snaps, models_dir)

@@ -356,6 +356,13 @@ def cmd_check_drift():
             threshold = result.get("threshold", {}).get(metric, "?")
             print(f"  {metric}: MAE={current} (rolling median={mae}, threshold={threshold})")
 
+    # Persist drift status for intelligence module / dashboard
+    drift_path = config.paths.intelligence_dir / "drift_status.json"
+    try:
+        drift_path.write_text(json.dumps(result, default=str))
+    except Exception as e:
+        print(f"Warning: failed to save drift status: {e}")
+
     if result["needs_retrain"]:
         print("Drift detected — triggering retrain...")
         cmd_retrain()

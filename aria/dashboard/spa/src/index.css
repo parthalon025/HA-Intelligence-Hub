@@ -378,8 +378,8 @@ body {
 .cursor-active::after {
   content: '\2588';
   font-family: var(--font-mono);
-  color: var(--accent);
-  margin-left: 8px;
+  color: var(--text-primary);
+  margin-left: 2px;
   animation: cursor-blink 1s step-end infinite;
 }
 
@@ -387,8 +387,8 @@ body {
 .cursor-working::after {
   content: '\258A';
   font-family: var(--font-mono);
-  color: var(--accent-warm);
-  margin-left: 8px;
+  color: var(--text-primary);
+  margin-left: 2px;
   animation: cursor-blink 0.5s step-end infinite;
 }
 
@@ -397,7 +397,7 @@ body {
   content: '_';
   font-family: var(--font-mono);
   color: var(--text-tertiary);
-  margin-left: 8px;
+  margin-left: 2px;
   animation: cursor-blink 2s step-end infinite;
 }
 

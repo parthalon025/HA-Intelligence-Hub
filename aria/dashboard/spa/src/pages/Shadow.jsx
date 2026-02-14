@@ -186,7 +186,7 @@ function CorrectionPropagation({ propagation }) {
       <section class="space-y-3">
         <div class="t-section-header" style="padding-bottom: 6px;"><h2 class="text-lg font-bold" style="color: var(--text-primary)">Correction Propagation</h2></div>
         <div class="t-callout" style="padding: 0.75rem;">
-          <span class="text-sm" style="color: var(--text-secondary)">Correction propagation is not active. Enable it in Settings → Correction Propagation.</span>
+          <span class="text-sm" style="color: var(--text-secondary)">Correction propagation is not active. It will activate once the shadow engine has enough prediction data to propagate corrections.</span>
         </div>
       </section>
     );

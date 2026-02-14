@@ -7,7 +7,7 @@ export function DriftStatus({ drift }) {
         title="Drift Detection"
         subtitle="Concept drift means your home's patterns have changed — maybe a new schedule, seasonal shift, or new devices. ARIA uses Page-Hinkley and ADWIN algorithms to detect this automatically."
       >
-        <Callout>Drift detection requires at least 5 days of prediction data. Check back after ARIA has been running for a week.</Callout>
+        <Callout>Drift detection data is not yet available. It will populate after ARIA runs its drift check (aria check-drift) with enough prediction history.</Callout>
       </Section>
     );
   }

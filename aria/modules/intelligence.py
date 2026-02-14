@@ -236,6 +236,13 @@ class IntelligenceModule(Module):
             "sequence_anomalies": self._read_json(self.intel_dir / "sequence_anomalies.json"),
             "power_profiles": self._read_json(self.intel_dir / "insights" / "power-profiles.json"),
             "automation_suggestions": self._read_latest_automation_suggestion(),
+            # ML research feature data (populated by engine batch runs)
+            "drift_status": self._read_json(self.intel_dir / "drift_status.json"),
+            "feature_selection": self._read_json(self.intel_dir / "feature_selection.json"),
+            "reference_model": self._read_json(self.intel_dir / "reference_model.json"),
+            "shap_attributions": self._read_json(self.intel_dir / "shap_attributions.json"),
+            "autoencoder_status": self._read_json(self.intel_dir / "models" / "autoencoder_status.json"),
+            "isolation_forest_status": self._read_json(self.intel_dir / "models" / "isolation_forest_status.json"),
         }
 
     def _determine_phase(self, days: int, ml_active: bool, meta_active: bool) -> tuple:

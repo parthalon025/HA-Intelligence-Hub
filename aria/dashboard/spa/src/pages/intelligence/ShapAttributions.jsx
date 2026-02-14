@@ -7,7 +7,7 @@ export function ShapAttributions({ shap }) {
         title="Feature Attributions (SHAP)"
         subtitle="SHAP values explain WHY ARIA made a prediction. Each bar shows how much a feature pushed the prediction up or down. Longer bars = more influence."
       >
-        <Callout>SHAP attributions require trained ML models. They'll appear after the first training cycle.</Callout>
+        <Callout>SHAP attributions are not yet available. They require trained ML models and are computed during prediction generation.</Callout>
       </Section>
     );
   }

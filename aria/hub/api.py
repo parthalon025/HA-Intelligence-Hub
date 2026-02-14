@@ -427,7 +427,23 @@ def create_api(hub: IntelligenceHub) -> FastAPI:
             # Include Thompson Sampling stats if shadow engine is loaded
             shadow_mod = hub.modules.get("shadow_engine")
             if shadow_mod and hasattr(shadow_mod, "get_thompson_stats"):
-                result["thompson_sampling"] = shadow_mod.get_thompson_stats()
+                raw_stats = shadow_mod.get_thompson_stats()
+                thompson = shadow_mod._thompson if hasattr(shadow_mod, "_thompson") else None
+                # Wrap bucket stats with sampler config for frontend
+                result["thompson_sampling"] = {
+                    "buckets": {
+                        k: {
+                            "alpha": v["alpha"],
+                            "beta": v["beta"],
+                            "explore_rate": round(1.0 - v["mean"], 3),
+                            "samples": v["trials"],
+                        }
+                        for k, v in raw_stats.items()
+                    },
+                    "strategy": "thompson",
+                    "discount_factor": thompson.discount_factor if thompson else 0.95,
+                    "window_size": thompson.window_size if thompson else 100,
+                }
 
             return result
         except Exception:
