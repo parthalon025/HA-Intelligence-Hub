@@ -1,6 +1,73 @@
 import { Section, Callout } from './utils.jsx';
 
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAY_ABBR = { Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun' };
+
+const METRICS = [
+  { key: 'power_watts', label: 'Power', unit: 'W', color: 'var(--accent)', isNegative: false },
+  { key: 'lights_on', label: 'Lights', unit: '', color: 'var(--accent)', isNegative: false },
+  { key: 'devices_home', label: 'Devices', unit: '', color: 'var(--accent)', isNegative: false },
+  { key: 'unavailable', label: 'Unavail', unit: '', color: 'var(--status-error)', isNegative: true },
+];
+
+function computeRanges(baselines) {
+  const ranges = {};
+  for (const m of METRICS) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const day of DAYS_ORDER) {
+      const b = baselines[day];
+      if (!b) continue;
+      const val = b[m.key]?.mean;
+      if (val == null) continue;
+      if (val < min) min = val;
+      if (val > max) max = val;
+    }
+    ranges[m.key] = { min: min === Infinity ? 0 : min, max: max === -Infinity ? 0 : max };
+  }
+  return ranges;
+}
+
+function intensity(value, min, max) {
+  if (max === min) return 0.5;
+  return Math.max(0, Math.min(1, (value - min) / (max - min)));
+}
+
+function formatValue(value, metric) {
+  if (value == null) return '\u2014';
+  if (metric.key === 'power_watts') return Math.round(value).toLocaleString();
+  return Math.round(value).toString();
+}
+
+function HeatCell({ value, std, metric, range }) {
+  const hasMean = value != null;
+  const i = hasMean ? intensity(value, range.min, range.max) : 0;
+  const displayVal = formatValue(value, metric);
+  const title = hasMean && std != null
+    ? `${metric.label}: ${displayVal}${metric.unit ? ' ' + metric.unit : ''} \u00B1 ${Math.round(std * 10) / 10}`
+    : metric.label;
+
+  return (
+    <div
+      class="relative flex items-center justify-center rounded"
+      style={`min-height: 2.5rem; min-width: 3.5rem;`}
+      title={title}
+    >
+      {/* Color layer */}
+      <div
+        class="absolute inset-0 rounded"
+        style={`background: ${hasMean ? metric.color : 'var(--bg-surface-raised)'}; opacity: ${hasMean ? 0.12 + i * 0.55 : 0.15};`}
+      />
+      {/* Value */}
+      <span
+        class="relative z-10 font-mono"
+        style={`font-size: var(--type-micro); color: var(--text-primary);`}
+      >
+        {displayVal}
+      </span>
+    </div>
+  );
+}
 
 export function Baselines({ baselines }) {
   if (!baselines || Object.keys(baselines).length === 0) {
@@ -15,6 +82,7 @@ export function Baselines({ baselines }) {
   }
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  const ranges = computeRanges(baselines);
 
   return (
     <Section
@@ -22,43 +90,74 @@ export function Baselines({ baselines }) {
       subtitle="This is 'normal' for each day of the week. The system flags deviations from these averages. More samples = tighter predictions."
       summary={Object.keys(baselines).length + " days"}
     >
-      <div class="t-frame overflow-x-auto" data-label="baselines">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs uppercase" style="border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary)">
-              <th class="px-4 py-2">Day</th>
-              <th class="px-4 py-2">Samples</th>
-              <th class="px-4 py-2">Power (W)</th>
-              <th class="px-4 py-2">Lights</th>
-              <th class="px-4 py-2">Devices</th>
-              <th class="px-4 py-2">Unavail</th>
-            </tr>
-          </thead>
-          <tbody>
-            {DAYS_ORDER.map(day => {
-              const b = baselines[day];
-              const isToday = day === today;
-              if (!b) {
-                return (
-                  <tr key={day} style={`border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary)`}>
-                    <td class="px-4 py-2">{day}{isToday ? ' (today)' : ''}</td>
-                    <td class="px-4 py-2" colSpan="5">no data</td>
-                  </tr>
-                );
-              }
-              return (
-                <tr key={day} style={`border-bottom: 1px solid var(--border-subtle)${isToday ? '; background: var(--accent-glow)' : ''}`}>
-                  <td class="px-4 py-2 font-medium" style="color: var(--text-secondary)">{day}{isToday ? ' (today)' : ''}</td>
-                  <td class="px-4 py-2">{b.sample_count}</td>
-                  <td class="px-4 py-2">{b.power_watts?.mean != null ? Math.round(b.power_watts.mean * 10) / 10 : '\u2014'}</td>
-                  <td class="px-4 py-2">{b.lights_on?.mean != null ? Math.round(b.lights_on.mean) : '\u2014'}</td>
-                  <td class="px-4 py-2">{b.devices_home?.mean != null ? Math.round(b.devices_home.mean) : '\u2014'}</td>
-                  <td class="px-4 py-2">{b.unavailable?.mean != null ? Math.round(b.unavailable.mean) : '\u2014'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div class="t-frame" data-label="baselines">
+        {/* Heatmap grid */}
+        <div
+          style={`
+            display: grid;
+            grid-template-columns: auto repeat(${METRICS.length}, 1fr) auto;
+            gap: 0.25rem;
+            padding: 0.5rem;
+          `}
+        >
+          {/* Header row: empty corner, metric labels, samples header */}
+          <div />
+          {METRICS.map(m => (
+            <div
+              key={m.key}
+              class="text-center text-xs uppercase"
+              style="color: var(--text-tertiary); padding-bottom: 0.25rem;"
+            >
+              {m.label}
+            </div>
+          ))}
+          <div
+            class="text-center text-xs uppercase"
+            style="color: var(--text-tertiary); padding-bottom: 0.25rem; padding-left: 0.5rem;"
+          >
+            n
+          </div>
+
+          {/* Data rows */}
+          {DAYS_ORDER.map(day => {
+            const b = baselines[day];
+            const isToday = day === today;
+
+            return [
+              // Day label
+              <div
+                key={day + '-label'}
+                class="flex items-center text-xs font-medium pr-2"
+                style={`
+                  color: ${isToday ? 'var(--accent)' : 'var(--text-secondary)'};
+                  ${isToday ? 'border-left: 2px solid var(--accent); padding-left: 0.375rem;' : 'padding-left: calc(2px + 0.375rem);'}
+                `}
+              >
+                {DAY_ABBR[day]}
+              </div>,
+
+              // Metric cells
+              ...METRICS.map(m => (
+                <HeatCell
+                  key={day + '-' + m.key}
+                  value={b?.[m.key]?.mean}
+                  std={b?.[m.key]?.std}
+                  metric={m}
+                  range={ranges[m.key]}
+                />
+              )),
+
+              // Sample count
+              <div
+                key={day + '-samples'}
+                class="flex items-center justify-center text-xs"
+                style="color: var(--text-tertiary); padding-left: 0.5rem;"
+              >
+                {b?.sample_count ?? '\u2014'}
+              </div>,
+            ];
+          })}
+        </div>
       </div>
     </Section>
   );
