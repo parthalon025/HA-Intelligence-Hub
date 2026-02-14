@@ -69,6 +69,9 @@ include = ["aria*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+    "ollama: tests requiring a running Ollama instance (deselect with '-m not ollama')",
+]
 filterwarnings = [
     "ignore:X does not have valid feature names:UserWarning",
     "ignore:datetime.datetime.utcnow\\(\\) is deprecated:DeprecationWarning",

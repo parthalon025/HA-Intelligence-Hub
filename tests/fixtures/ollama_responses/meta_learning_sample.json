@@ -1,0 +1,3 @@
+{
+  "response": "<think>\nLooking at the model performance, power_watts has R2=0.45.\nThe feature importance shows hour_sin and people_home_count are top features.\n</think>\n\n```json\n[\n  {\n    \"action\": \"enable_feature\",\n    \"target\": \"people_home_x_hour_sin\",\n    \"reason\": \"people_home_count and hour_sin are both top features. Their interaction captures the occupancy-time pattern driving power usage.\",\n    \"expected_impact\": \"power_watts MAE -5-10%\",\n    \"confidence\": \"medium\"\n  }\n]\n```"
+}
