@@ -20,8 +20,9 @@ export function Baselines({ baselines }) {
     <Section
       title="Baselines"
       subtitle="This is 'normal' for each day of the week. The system flags deviations from these averages. More samples = tighter predictions."
+      summary={Object.keys(baselines).length + " days"}
     >
-      <div class="t-card overflow-x-auto">
+      <div class="t-frame overflow-x-auto" data-label="baselines">
         <table class="w-full text-sm">
           <thead>
             <tr class="text-left text-xs uppercase" style="border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary)">

@@ -18,8 +18,9 @@ export function DailyInsight({ insight }) {
     <Section
       title="Daily Insight"
       subtitle="AI analysis of what happened yesterday and what to watch for. Generated nightly from your full data set."
+      summary={insight.date}
     >
-      <div class="t-card p-4">
+      <div class="t-frame p-4" data-label="insight">
         <span class="inline-block rounded px-2 py-0.5 text-xs mb-3" style="background: var(--bg-surface-raised); color: var(--text-tertiary)">{insight.date}</span>
         <div class="space-y-2" style="color: var(--text-secondary)">
           {lines.map((line, i) => {

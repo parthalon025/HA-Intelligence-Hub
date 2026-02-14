@@ -32,13 +32,14 @@ export function PredictionsVsActuals({ predictions, intradayTrend }) {
     <Section
       title="Predictions vs Actuals"
       subtitle="Large deltas mean something unusual is happening. Small deltas mean the system understands your patterns."
+      summary={predictions.target_date}
     >
       {biggestDelta && (
         <Callout>
           {biggestDelta.metric} is {biggestDelta.pct}% off prediction ({biggestDelta.actual} actual vs {biggestDelta.predicted} predicted). Worth a look?
         </Callout>
       )}
-      <div class="t-card overflow-x-auto">
+      <div class="t-frame overflow-x-auto" data-label="predictions">
         <table class="w-full text-sm">
           <thead>
             <tr class="text-left text-xs uppercase" style="border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary)">

@@ -31,10 +31,10 @@ export function HomeRightNow({ intraday, baselines }) {
     : 'Latest snapshot of your home. Comparisons to baseline will appear after 7 days of data.';
 
   return (
-    <Section title="Home Right Now" subtitle={subtitle}>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <Section title="Home Right Now" subtitle={subtitle} summary={items.length + " metrics"}>
+      <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {items.map((item, i) => (
-          <div key={i} class="t-card p-4" style={item.warning ? 'border: 2px solid var(--status-warning)' : ''}>
+          <div key={i} class="t-frame p-4" data-label={item.label} style={item.warning ? 'border: 2px solid var(--status-warning)' : ''}>
             <div class="text-2xl font-bold" style={item.warning ? 'color: var(--status-warning)' : 'color: var(--accent)'}>
               {item.value}
             </div>

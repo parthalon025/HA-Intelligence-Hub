@@ -129,7 +129,7 @@ export function ActivitySection({ activity }) {
   }
 
   return (
-    <Section title="Activity Monitor" subtitle={contextSubtitle}>
+    <Section title="Activity Monitor" subtitle={contextSubtitle} summary={occ.anyone_home ? "Home" : "Away"}>
       <div class="space-y-4">
 
         {/* WebSocket health + anomaly alerts */}
@@ -149,9 +149,9 @@ export function ActivitySection({ activity }) {
         ))}
 
         {/* Status bar */}
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Occupancy */}
-          <div class="t-card p-4" style={`border-left: 4px solid ${occ.anyone_home ? 'var(--status-healthy)' : 'var(--border-subtle)'}`}>
+          <div class="t-frame p-4" style={`border-left: 4px solid ${occ.anyone_home ? 'var(--status-healthy)' : 'var(--border-subtle)'}`}>
             <div class="text-2xl font-bold" style={`color: ${occ.anyone_home ? 'var(--status-healthy)' : 'var(--text-tertiary)'}`}>
               {occ.anyone_home ? 'Home' : 'Away'}
             </div>
@@ -173,7 +173,7 @@ export function ActivitySection({ activity }) {
           </div>
 
           {/* Current window */}
-          <div class="t-card p-4">
+          <div class="t-frame p-4">
             <div class="text-2xl font-bold" style="color: var(--accent)">
               {rate.current != null ? rate.current : '\u2014'}
             </div>
@@ -189,7 +189,7 @@ export function ActivitySection({ activity }) {
           </div>
 
           {/* Today total */}
-          <div class="t-card p-4">
+          <div class="t-frame p-4">
             <div class="text-2xl font-bold" style="color: var(--accent)">
               {eventsToday != null ? eventsToday : '\u2014'}
             </div>
@@ -197,7 +197,7 @@ export function ActivitySection({ activity }) {
           </div>
 
           {/* Snapshots */}
-          <div class="t-card p-4">
+          <div class="t-frame p-4">
             <div class="text-2xl font-bold" style="color: var(--accent)">
               {snap.today_count != null ? `${snap.today_count}/${snap.daily_cap}` : '\u2014'}
             </div>
@@ -212,10 +212,10 @@ export function ActivitySection({ activity }) {
         <div class="text-xs italic px-1" style="color: var(--text-tertiary)">{snapMsg}</div>
 
         {/* Recent Activity + Domains side by side */}
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* Recent Activity -- 2/3 width */}
-          <div class="md:col-span-2 t-card p-4">
+          <div class="lg:col-span-2 t-frame p-4" data-label="recent">
             <div class="text-xs font-bold uppercase mb-2" style="color: var(--text-tertiary)">What Just Happened</div>
             {recentEvents.length === 0 ? (
               <p class="text-sm" style="color: var(--text-tertiary)">Waiting for state changes...</p>
@@ -242,7 +242,7 @@ export function ActivitySection({ activity }) {
           </div>
 
           {/* Domain breakdown -- 1/3 width */}
-          <div class="t-card p-4">
+          <div class="t-frame p-4" data-label="domains">
             <div class="text-xs font-bold uppercase mb-2" style="color: var(--text-tertiary)">Active Domains (1h)</div>
             {Object.keys(domains).length === 0 ? (
               <p class="text-sm" style="color: var(--text-tertiary)">No activity yet.</p>
@@ -273,7 +273,7 @@ export function ActivitySection({ activity }) {
 
         {/* Detected Patterns */}
         {patterns.length > 0 && (
-          <div class="t-card p-4">
+          <div class="t-frame p-4" data-label="patterns">
             <div class="text-xs font-bold uppercase mb-2" style="color: var(--text-tertiary)">Detected Patterns (24h)</div>
             <p class="text-xs mb-2" style="color: var(--text-tertiary)">Recurring event sequences that suggest routines or automations.</p>
             <div class="space-y-1.5">
@@ -297,7 +297,7 @@ export function ActivitySection({ activity }) {
         )}
 
         {/* Timeline */}
-        <div class="t-card p-4">
+        <div class="t-frame p-4" data-label="timeline">
           <ActivityTimeline windows={windows} />
           {windows.length === 0 && (
             <p class="text-sm" style="color: var(--text-tertiary)">Timeline will appear after the first 15-minute window.</p>
@@ -306,7 +306,7 @@ export function ActivitySection({ activity }) {
 
         {/* Snapshot Log */}
         {snap.log_today && snap.log_today.length > 0 && (
-          <details class="t-card">
+          <details class="t-frame">
             <summary class="px-4 py-3 cursor-pointer text-sm font-medium" style="color: var(--text-secondary)">
               Snapshot Log \u2014 {snap.log_today.length} adaptive snapshot{snap.log_today.length !== 1 ? 's' : ''} today
             </summary>

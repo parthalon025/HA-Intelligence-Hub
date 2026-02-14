@@ -4,6 +4,7 @@ import useComputed from '../hooks/useComputed.js';
 import { fetchJson } from '../api.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
+import HeroCard from '../components/HeroCard.jsx';
 import { Callout, Section } from './intelligence/utils.jsx';
 import { LearningProgress } from './intelligence/LearningProgress.jsx';
 import { HomeRightNow } from './intelligence/HomeRightNow.jsx';
@@ -29,9 +30,11 @@ function ShadowBrief({ shadowAccuracy, pipeline }) {
       ? 'color: var(--status-warning)'
       : 'color: var(--status-error)';
 
+  const summaryText = total > 0 ? `${Math.round(acc)}% accuracy` : stage;
+
   return (
-    <Section title="Shadow Engine" subtitle="Predict-compare-score loop running alongside the main engine.">
-      <div class="t-card p-4">
+    <Section title="Shadow Engine" subtitle="Predict-compare-score loop running alongside the main engine." summary={summaryText}>
+      <div class="t-frame p-4" data-label="shadow">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
             <span class="text-xs font-medium rounded-full px-2.5 py-0.5 capitalize" style="background: var(--accent-glow); color: var(--accent)">{stage}</span>
@@ -118,6 +121,26 @@ export default function Intelligence() {
     );
   }
 
+  // Compute hero metric: current power draw
+  const latestIntraday = intel.intraday_trend?.length > 0 ? intel.intraday_trend[intel.intraday_trend.length - 1] : null;
+  const currentPower = latestIntraday?.power_watts ?? null;
+
+  // Compute delta vs baseline if available
+  let powerDelta = null;
+  if (currentPower != null && intel.baselines) {
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const baseline = intel.baselines[today];
+    if (baseline?.power_watts?.mean != null) {
+      const diff = currentPower - baseline.power_watts.mean;
+      const pct = baseline.power_watts.mean > 0 ? Math.round((diff / baseline.power_watts.mean) * 100) : 0;
+      if (Math.abs(pct) >= 10) {
+        powerDelta = `${pct > 0 ? '+' : ''}${pct}% vs ${today}`;
+      } else {
+        powerDelta = `typical for ${today}`;
+      }
+    }
+  }
+
   return (
     <div class="space-y-8 animate-page-enter">
       <div class="t-section-header" style="padding-bottom: 8px;">
@@ -125,38 +148,53 @@ export default function Intelligence() {
         <p class="text-sm" style="color: var(--text-tertiary)">Your home's learning engine — data maturity, real-time activity, baselines, and ML insights.</p>
       </div>
 
-      <div class="animate-fade-in-up delay-100">
-        <LearningProgress maturity={intel.data_maturity} shadowStage={pipeline?.current_stage} shadowAccuracy={shadowAccuracy?.overall_accuracy} />
-      </div>
-      <div class="animate-fade-in-up delay-200">
-        <HomeRightNow intraday={intel.intraday_trend} baselines={intel.baselines} />
-      </div>
-      <div class="animate-fade-in-up delay-300">
-        <ActivitySection activity={intel.activity} />
-      </div>
-      <div class="animate-fade-in-up delay-400">
-        <ShadowBrief shadowAccuracy={shadowAccuracy} pipeline={pipeline} />
-      </div>
-      <div class="animate-fade-in-up delay-500">
-        <TrendsOverTime trendData={intel.trend_data} intradayTrend={intel.intraday_trend} />
-      </div>
-      <div class="animate-fade-in-up delay-600">
-        <PredictionsVsActuals predictions={intel.predictions} intradayTrend={intel.intraday_trend} />
-      </div>
-      <div class="animate-fade-in-up delay-700">
-        <Baselines baselines={intel.baselines} />
-      </div>
-      <div class="animate-fade-in-up delay-800">
-        <DailyInsight insight={intel.daily_insight} />
-      </div>
-      <Correlations correlations={intel.correlations} />
-      <SystemStatus runLog={intel.run_log} mlModels={intel.ml_models} metaLearning={intel.meta_learning} />
-      <Section title="Configuration" subtitle="Engine parameters are now managed in Settings.">
-        <div class="t-callout p-3 text-sm flex items-center justify-between">
-          <span>Engine settings have moved to the dedicated Settings page.</span>
-          <a href="#/settings" class="font-medium whitespace-nowrap" style="color: var(--accent)">Settings &rarr;</a>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Row 1: HeroCard (full width) */}
+        <div class="sm:col-span-2">
+          <HeroCard
+            value={currentPower}
+            label="home right now"
+            unit="W"
+            delta={powerDelta}
+          />
         </div>
-      </Section>
+
+        {/* Row 2: LearningProgress + ShadowBrief (2-col on tablet+) */}
+        <LearningProgress maturity={intel.data_maturity} shadowStage={pipeline?.current_stage} shadowAccuracy={shadowAccuracy?.overall_accuracy} />
+        <ShadowBrief shadowAccuracy={shadowAccuracy} pipeline={pipeline} />
+
+        {/* Row 3: HomeRightNow (full width) */}
+        <div class="sm:col-span-2">
+          <HomeRightNow intraday={intel.intraday_trend} baselines={intel.baselines} />
+        </div>
+
+        {/* Row 4: ActivitySection (full width) */}
+        <div class="sm:col-span-2">
+          <ActivitySection activity={intel.activity} />
+        </div>
+
+        {/* Row 5: TrendsOverTime + PredictionsVsActuals (2-col on tablet+) */}
+        <TrendsOverTime trendData={intel.trend_data} intradayTrend={intel.intraday_trend} />
+        <PredictionsVsActuals predictions={intel.predictions} intradayTrend={intel.intraday_trend} />
+
+        {/* Row 6: Baselines + DailyInsight (2-col on tablet+) */}
+        <Baselines baselines={intel.baselines} />
+        <DailyInsight insight={intel.daily_insight} />
+
+        {/* Row 7: Correlations + SystemStatus (2-col on tablet+) */}
+        <Correlations correlations={intel.correlations} />
+        <SystemStatus runLog={intel.run_log} mlModels={intel.ml_models} metaLearning={intel.meta_learning} />
+
+        {/* Row 8: Configuration redirect (full width) */}
+        <div class="sm:col-span-2">
+          <Section title="Configuration" subtitle="Engine parameters are now managed in Settings.">
+            <div class="t-callout p-3 text-sm flex items-center justify-between">
+              <span>Engine settings have moved to the dedicated Settings page.</span>
+              <a href="#/settings" class="font-medium whitespace-nowrap" style="color: var(--accent)">Settings &rarr;</a>
+            </div>
+          </Section>
+        </div>
+      </div>
     </div>
   );
 }

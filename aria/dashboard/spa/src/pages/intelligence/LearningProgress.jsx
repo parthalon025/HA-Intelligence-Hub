@@ -13,8 +13,8 @@ export function LearningProgress({ maturity, shadowStage, shadowAccuracy }) {
     : 'The system has enough data to predict your home\'s behavior and flag anomalies.';
 
   return (
-    <Section title="Learning Progress">
-      <div class="t-card p-4 space-y-4">
+    <Section title="Learning Progress" summary={maturity.phase}>
+      <div class="t-frame p-4 space-y-4" data-label="learning">
         <div>
           <div class="flex justify-between text-xs mb-1" style="color: var(--text-tertiary)">
             {PHASE_LABELS.map((label, i) => {

@@ -10,11 +10,12 @@ export function Correlations({ correlations }) {
         ? 'Devices that change together. Strong correlations suggest automation opportunities or shared failure modes.'
         : 'Devices that tend to change together \u2014 useful for creating automations or finding shared failure points.'
       }
+      summary={hasData ? correlations.length + " pairs" : null}
     >
       {!hasData ? (
         <Callout>No correlations yet. Needs enough data to detect statistically reliable relationships between devices.</Callout>
       ) : (
-        <div class="t-card overflow-x-auto">
+        <div class="t-frame overflow-x-auto" data-label="correlations">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-xs uppercase" style="border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary)">

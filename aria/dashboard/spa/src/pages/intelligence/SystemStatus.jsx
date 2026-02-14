@@ -14,10 +14,11 @@ export function SystemStatus({ runLog, mlModels, metaLearning }) {
     <Section
       title="System Status"
       subtitle={`If something is red here, the intelligence pipeline is broken and won't catch issues in your home. ${healthNote}`}
+      summary={hasErrors ? "errors" : "healthy"}
     >
       <div class="space-y-4">
         {/* Run Log */}
-        <div class="t-card overflow-x-auto">
+        <div class="t-frame overflow-x-auto" data-label="run-log">
           <div class="px-4 py-2 text-xs font-bold uppercase" style="border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary)">Run Log</div>
           {(!runLog || runLog.length === 0) ? (
             <div class="px-4 py-3 text-sm" style="color: var(--text-tertiary)">No runs recorded yet.</div>
@@ -49,7 +50,7 @@ export function SystemStatus({ runLog, mlModels, metaLearning }) {
         </div>
 
         {/* ML Models */}
-        <div class="t-card p-4">
+        <div class="t-frame p-4" data-label="ml-models">
           <div class="text-xs font-bold uppercase mb-2" style="color: var(--text-tertiary)">ML Models</div>
           {(!mlModels || mlModels.count === 0) ? (
             <p class="text-sm" style="color: var(--text-tertiary)">ML models activate after 14 days of data. Until then, predictions use statistical baselines only.</p>
@@ -80,7 +81,7 @@ export function SystemStatus({ runLog, mlModels, metaLearning }) {
         </div>
 
         {/* Meta-Learning */}
-        <div class="t-card p-4">
+        <div class="t-frame p-4" data-label="meta-learning">
           <div class="text-xs font-bold uppercase mb-2" style="color: var(--text-tertiary)">Meta-Learning</div>
           {(!metaLearning || metaLearning.applied_count === 0) ? (
             <p class="text-sm" style="color: var(--text-tertiary)">Meta-learning reviews model performance weekly and auto-tunes feature selection. Activates after the first training cycle.</p>
