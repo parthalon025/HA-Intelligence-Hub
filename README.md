@@ -157,7 +157,7 @@ flowchart TB
         D2["Live WebSocket updates"]
     end
 
-    HA -- "scheduled\nvia cron" --> Engine
+    HA -- "scheduled\nvia systemd timers" --> Engine
     HA -- "persistent\nWebSocket" --> Hub
     Engine -- "JSON files" --> Dash
     Hub -- "SQLite cache\n+ WebSocket" --> Dash
@@ -294,6 +294,22 @@ pytest tests/ -v
 # Lint
 ruff check . && ruff format --check .
 ```
+
+## Citing ARIA
+
+If you use ARIA in academic research, please cite:
+
+```bibtex
+@software{mcfarland2026aria,
+  author = {McFarland, Justin},
+  title = {ARIA: Adaptive Residence Intelligence Architecture},
+  year = {2026},
+  url = {https://github.com/parthalon025/ha-aria},
+  note = {ML-powered intelligence for Home Assistant — local-first predictive analytics, anomaly detection, and automation generation}
+}
+```
+
+**Keywords:** smart home intelligence, home automation ML, local-first IoT analytics, concept drift detection, Thompson Sampling exploration, occupancy prediction, entity correlation, time-series anomaly detection, SHAP explainability, Home Assistant integration
 
 ## License
 
