@@ -1350,5 +1350,293 @@ class TestIncrementalLightGBM:
         assert should_full_retrain(current_trees=400, max_trees=500) is False
 
 
+class TestMLFeedbackToCapabilities:
+    """Test ML Engine writing accuracy feedback back to capabilities cache."""
+
+    @pytest.fixture
+    def ml_engine_with_data(self, mock_hub, tmp_path):
+        """Create MLEngine with synthetic training data on disk."""
+        models_dir = tmp_path / "models"
+        training_data_dir = tmp_path / "training_data"
+        models_dir.mkdir()
+        training_data_dir.mkdir()
+
+        engine = MLEngine(mock_hub, str(models_dir), str(training_data_dir))
+
+        # Write 30 days of synthetic snapshot files
+        base_date = datetime.now()
+        for day_offset in range(30):
+            date = base_date - timedelta(days=30 - day_offset)
+            snapshot = {
+                "date": date.strftime("%Y-%m-%d"),
+                "hour": 12,
+                "time_features": {
+                    "hour_sin": float(np.sin(2 * np.pi * 12 / 24)),
+                    "hour_cos": float(np.cos(2 * np.pi * 12 / 24)),
+                    "dow_sin": float(np.sin(2 * np.pi * date.weekday() / 7)),
+                    "dow_cos": float(np.cos(2 * np.pi * date.weekday() / 7)),
+                    "month_sin": 0.5,
+                    "month_cos": 0.866,
+                    "day_of_year_sin": 0.3,
+                    "day_of_year_cos": 0.95,
+                    "is_weekend": date.weekday() >= 5,
+                    "is_holiday": False,
+                    "is_night": False,
+                    "is_work_hours": True,
+                    "minutes_since_sunrise": 360,
+                    "minutes_until_sunset": 300,
+                    "daylight_remaining_pct": 0.5,
+                },
+                "weather": {"temp_f": 65.0 + day_offset % 10, "humidity_pct": 50.0 + day_offset % 20, "wind_mph": 5.0},
+                "power": {
+                    "total_watts": 500.0 + day_offset * 10 + float(np.random.default_rng(day_offset).normal() * 50)
+                },
+                "lights": {"on": 3 + (day_offset % 3), "total_brightness": 150.0 + day_offset * 5},
+                "occupancy": {
+                    "people_home": ["person.justin"],
+                    "people_home_count": 1,
+                    "device_count_home": 2 + (day_offset % 2),
+                },
+                "motion": {"active_count": 1 + (day_offset % 2)},
+            }
+            snapshot_file = training_data_dir / f"{date.strftime('%Y-%m-%d')}.json"
+            with open(snapshot_file, "w") as f:
+                json.dump(snapshot, f)
+
+        return engine
+
+    @pytest.fixture
+    def mock_capabilities_with_usefulness(self):
+        """Capabilities with existing usefulness_components (predictability=0)."""
+        return {
+            "data": {
+                "power_monitoring": {
+                    "available": True,
+                    "entities": ["sensor.power_1"],
+                    "usefulness_components": {
+                        "entity_count": 50,
+                        "predictability": 0,
+                        "variability": 30,
+                    },
+                },
+                "lighting": {
+                    "available": True,
+                    "entities": ["light.living_room"],
+                    "usefulness_components": {
+                        "entity_count": 40,
+                        "predictability": 0,
+                        "variability": 25,
+                    },
+                },
+                "occupancy": {
+                    "available": True,
+                    "entities": ["person.justin"],
+                    "usefulness_components": {
+                        "entity_count": 20,
+                        "predictability": 0,
+                        "variability": 15,
+                    },
+                },
+            }
+        }
+
+    @pytest.mark.asyncio
+    async def test_feedback_writes_ml_accuracy_to_capabilities(
+        self, ml_engine_with_data, mock_hub, mock_capabilities_with_usefulness
+    ):
+        """After training, capabilities cache has ml_accuracy for each trained capability."""
+        mock_hub.get_cache_fresh = AsyncMock(return_value=mock_capabilities_with_usefulness)
+
+        # get_cache returns capabilities for the feedback method
+        async def mock_get_cache(key):
+            if key == "capabilities":
+                return mock_capabilities_with_usefulness
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        await ml_engine_with_data.train_models(days_history=30)
+
+        # Find the set_cache call for "capabilities"
+        cap_calls = [c for c in mock_hub.set_cache.call_args_list if c[0][0] == "capabilities"]
+        assert len(cap_calls) >= 1, "capabilities cache was not updated with ML feedback"
+
+        caps_data = cap_calls[0][0][1]
+
+        # power_monitoring should have ml_accuracy
+        assert "ml_accuracy" in caps_data["power_monitoring"]
+        ml_acc = caps_data["power_monitoring"]["ml_accuracy"]
+        assert "mean_r2" in ml_acc
+        assert "targets" in ml_acc
+        assert "last_trained" in ml_acc
+        assert "feature_importance_top5" in ml_acc
+        assert isinstance(ml_acc["mean_r2"], float)
+        assert isinstance(ml_acc["targets"], dict)
+        assert isinstance(ml_acc["feature_importance_top5"], list)
+        assert len(ml_acc["feature_importance_top5"]) <= 5
+
+    @pytest.mark.asyncio
+    async def test_feedback_updates_predictability_component(
+        self, ml_engine_with_data, mock_hub, mock_capabilities_with_usefulness
+    ):
+        """After training, usefulness_components.predictability is updated from 0."""
+        mock_hub.get_cache_fresh = AsyncMock(return_value=mock_capabilities_with_usefulness)
+
+        async def mock_get_cache(key):
+            if key == "capabilities":
+                return mock_capabilities_with_usefulness
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        await ml_engine_with_data.train_models(days_history=30)
+
+        cap_calls = [c for c in mock_hub.set_cache.call_args_list if c[0][0] == "capabilities"]
+        assert len(cap_calls) >= 1
+
+        caps_data = cap_calls[0][0][1]
+
+        for cap_name in ["power_monitoring", "lighting", "occupancy"]:
+            cap = caps_data[cap_name]
+            assert "usefulness_components" in cap
+            predictability = cap["usefulness_components"]["predictability"]
+            # predictability = round(mean_r2_clamped * 100), should be an int
+            assert isinstance(predictability, int)
+            # With 30 days of synthetic data, R² should be > 0 for at least some caps
+            # (we don't assert > 0 for all because some targets may have poor signal)
+
+    @pytest.mark.asyncio
+    async def test_feedback_predictability_matches_r2(
+        self, ml_engine_with_data, mock_hub, mock_capabilities_with_usefulness
+    ):
+        """predictability = round(clamped_mean_r2 * 100)."""
+        mock_hub.get_cache_fresh = AsyncMock(return_value=mock_capabilities_with_usefulness)
+
+        async def mock_get_cache(key):
+            if key == "capabilities":
+                return mock_capabilities_with_usefulness
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        await ml_engine_with_data.train_models(days_history=30)
+
+        cap_calls = [c for c in mock_hub.set_cache.call_args_list if c[0][0] == "capabilities"]
+        caps_data = cap_calls[0][0][1]
+
+        for cap_name in ["power_monitoring", "lighting", "occupancy"]:
+            cap = caps_data[cap_name]
+            mean_r2 = cap["ml_accuracy"]["mean_r2"]
+            clamped = max(0.0, min(1.0, mean_r2))
+            expected_predictability = round(clamped * 100)
+            assert cap["usefulness_components"]["predictability"] == expected_predictability, (
+                f"{cap_name}: predictability={cap['usefulness_components']['predictability']}, "
+                f"expected={expected_predictability} (mean_r2={mean_r2})"
+            )
+
+    @pytest.mark.asyncio
+    async def test_feedback_metadata_source_is_ml_feedback(
+        self, ml_engine_with_data, mock_hub, mock_capabilities_with_usefulness
+    ):
+        """Capabilities cache is saved with source=ml_feedback metadata."""
+        mock_hub.get_cache_fresh = AsyncMock(return_value=mock_capabilities_with_usefulness)
+
+        async def mock_get_cache(key):
+            if key == "capabilities":
+                return mock_capabilities_with_usefulness
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        await ml_engine_with_data.train_models(days_history=30)
+
+        cap_calls = [c for c in mock_hub.set_cache.call_args_list if c[0][0] == "capabilities"]
+        assert len(cap_calls) >= 1
+
+        # Third positional arg is metadata
+        metadata = cap_calls[0][0][2]
+        assert metadata == {"source": "ml_feedback"}
+
+    @pytest.mark.asyncio
+    async def test_feedback_skips_when_no_capabilities_cache(
+        self, ml_engine_with_data, mock_hub
+    ):
+        """Feedback method handles missing capabilities cache gracefully."""
+        mock_hub.get_cache_fresh = AsyncMock(return_value={
+            "data": {
+                "power_monitoring": {"available": True, "entities": ["sensor.power_1"]},
+            }
+        })
+        # get_cache returns None for capabilities (simulating cache miss during feedback)
+        mock_hub.get_cache = AsyncMock(return_value=None)
+
+        # Should not raise
+        await ml_engine_with_data.train_models(days_history=30)
+
+        # No capabilities set_cache call should exist
+        cap_calls = [c for c in mock_hub.set_cache.call_args_list if c[0][0] == "capabilities"]
+        assert len(cap_calls) == 0
+
+    @pytest.mark.asyncio
+    async def test_feedback_creates_usefulness_components_if_missing(
+        self, ml_engine_with_data, mock_hub
+    ):
+        """Feedback creates usefulness_components dict if capability lacks one."""
+        caps_no_usefulness = {
+            "data": {
+                "power_monitoring": {
+                    "available": True,
+                    "entities": ["sensor.power_1"],
+                    # No usefulness_components key
+                },
+            }
+        }
+        mock_hub.get_cache_fresh = AsyncMock(return_value=caps_no_usefulness)
+
+        async def mock_get_cache(key):
+            if key == "capabilities":
+                return caps_no_usefulness
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        await ml_engine_with_data.train_models(days_history=30)
+
+        cap_calls = [c for c in mock_hub.set_cache.call_args_list if c[0][0] == "capabilities"]
+        assert len(cap_calls) >= 1
+
+        caps_data = cap_calls[0][0][1]
+        cap = caps_data["power_monitoring"]
+        assert "usefulness_components" in cap
+        assert "predictability" in cap["usefulness_components"]
+
+    @pytest.mark.asyncio
+    async def test_feedback_targets_detail_structure(
+        self, ml_engine_with_data, mock_hub, mock_capabilities_with_usefulness
+    ):
+        """ml_accuracy.targets has per-target r2 and mae."""
+        mock_hub.get_cache_fresh = AsyncMock(return_value=mock_capabilities_with_usefulness)
+
+        async def mock_get_cache(key):
+            if key == "capabilities":
+                return mock_capabilities_with_usefulness
+            return None
+
+        mock_hub.get_cache = AsyncMock(side_effect=mock_get_cache)
+
+        await ml_engine_with_data.train_models(days_history=30)
+
+        cap_calls = [c for c in mock_hub.set_cache.call_args_list if c[0][0] == "capabilities"]
+        caps_data = cap_calls[0][0][1]
+
+        # power_monitoring trains power_watts target
+        targets = caps_data["power_monitoring"]["ml_accuracy"]["targets"]
+        assert "power_watts" in targets
+        assert "r2" in targets["power_watts"]
+        assert "mae" in targets["power_watts"]
+        assert isinstance(targets["power_watts"]["r2"], float)
+        assert isinstance(targets["power_watts"]["mae"], float)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

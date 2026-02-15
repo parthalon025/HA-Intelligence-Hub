@@ -177,6 +177,9 @@ class MLEngine(Module):
 
         self.logger.info(f"Loaded {len(training_data)} snapshots for training")
 
+        # Track training results per capability for feedback loop
+        training_results: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
         # Train models for each available capability
         for capability_name, capability_data in capabilities.items():
             if not capability_data.get("available"):
@@ -193,6 +196,24 @@ class MLEngine(Module):
             for target in prediction_targets:
                 try:
                     await self._train_model_for_target(target, training_data, capability_name)
+                    # Collect results for feedback
+                    if target in self.models and "accuracy_scores" in self.models[target]:
+                        scores = self.models[target]["accuracy_scores"]
+                        # Average R² across all model types
+                        r2_values = [v for k, v in scores.items() if k.endswith("_r2")]
+                        mae_values = [v for k, v in scores.items() if k.endswith("_mae")]
+                        avg_r2 = sum(r2_values) / len(r2_values) if r2_values else 0.0
+                        avg_mae = sum(mae_values) / len(mae_values) if mae_values else 0.0
+                        # Get top 5 features from RF importance
+                        importance = self.models[target].get("feature_importance", {})
+                        top5 = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:5]
+                        if capability_name not in training_results:
+                            training_results[capability_name] = {}
+                        training_results[capability_name][target] = {
+                            "r2": round(avg_r2, 3),
+                            "mae": round(avg_mae, 3),
+                            "top_features": [name for name, _ in top5],
+                        }
                 except Exception as e:
                     self.logger.error(f"Failed to train model for {target}: {e}")
 
@@ -225,11 +246,86 @@ class MLEngine(Module):
             },
         )
 
+        # Write accuracy feedback to capabilities cache (closed-loop)
+        if training_results:
+            await self._write_feedback_to_capabilities(training_results)
+
         # Store feature configuration for reuse across restarts
         config = await self._get_feature_config()
         config["last_modified"] = datetime.now().isoformat()
         config["modified_by"] = "ml_engine"
         await self.hub.set_cache("feature_config", config)
+
+    async def _write_feedback_to_capabilities(self, training_results: Dict[str, Dict[str, Dict[str, Any]]]):
+        """Write ML accuracy feedback back to the capabilities cache.
+
+        Closes the loop between ML training and capability usefulness scoring
+        by updating each capability's ``ml_accuracy`` and ``predictability``
+        component based on actual model performance.
+
+        Args:
+            training_results: Per-capability, per-target training metrics.
+                Structure: ``{cap_name: {target: {"r2": float, "mae": float, "top_features": list}}}``
+        """
+        caps_entry = await self.hub.get_cache("capabilities")
+        if not caps_entry:
+            self.logger.warning("Cannot write ML feedback: capabilities cache not found")
+            return
+
+        caps = caps_entry.get("data", {})
+        now_iso = datetime.now().isoformat()
+        updated_count = 0
+
+        for cap_name, targets in training_results.items():
+            if cap_name not in caps:
+                continue
+
+            cap = caps[cap_name]
+
+            # Compute mean R² across all targets for this capability
+            r2_values = [t["r2"] for t in targets.values()]
+            mean_r2 = sum(r2_values) / len(r2_values) if r2_values else 0.0
+            # Clamp to [0, 1] — negative R² means worse than baseline
+            mean_r2_clamped = max(0.0, min(1.0, mean_r2))
+
+            # Build per-target detail dict
+            targets_detail = {}
+            all_top_features = []
+            for target_name, metrics in targets.items():
+                targets_detail[target_name] = {
+                    "r2": metrics["r2"],
+                    "mae": metrics["mae"],
+                }
+                all_top_features.extend(metrics.get("top_features", []))
+
+            # Deduplicate top features while preserving order
+            seen = set()
+            unique_top_features = []
+            for f in all_top_features:
+                if f not in seen:
+                    seen.add(f)
+                    unique_top_features.append(f)
+
+            # Write ml_accuracy block
+            cap["ml_accuracy"] = {
+                "mean_r2": round(mean_r2, 3),
+                "targets": targets_detail,
+                "last_trained": now_iso,
+                "feature_importance_top5": unique_top_features[:5],
+            }
+
+            # Update predictability component in usefulness scoring
+            if "usefulness_components" not in cap:
+                cap["usefulness_components"] = {}
+            cap["usefulness_components"]["predictability"] = round(mean_r2_clamped * 100)
+
+            updated_count += 1
+
+        if updated_count > 0:
+            await self.hub.set_cache("capabilities", caps, {"source": "ml_feedback"})
+            self.logger.info(
+                f"ML feedback written to {updated_count} capabilities in cache"
+            )
 
     async def _load_training_data(self, days: int) -> List[Dict[str, Any]]:
         """Load historical snapshots for training.
