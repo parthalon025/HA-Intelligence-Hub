@@ -6,7 +6,7 @@ naming, scoring) and integrates with the ARIA hub lifecycle.
 
 import logging
 from datetime import date, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from aria.hub.core import Module, IntelligenceHub
 from aria.modules.organic_discovery.feature_vectors import build_feature_matrix
@@ -156,7 +156,6 @@ class OrganicDiscoveryModule(Module):
             import numpy as np
             matrix = np.empty((0, 0))
             entity_ids = []
-            feature_names = []
 
         # 3. Cluster (cluster_entities handles small-input edge cases internally)
         clusters = []

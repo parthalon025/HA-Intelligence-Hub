@@ -1,7 +1,7 @@
 """Tests for snapshot assembler using real ARIA collectors."""
 import pytest
 from tests.synthetic.assembler import SnapshotAssembler
-from tests.synthetic.entities import DeviceRoster, EntityStateGenerator
+from tests.synthetic.entities import DeviceRoster
 from tests.synthetic.people import Person, Schedule
 from tests.synthetic.weather import WeatherProfile
 

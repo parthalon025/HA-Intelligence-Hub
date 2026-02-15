@@ -2,7 +2,6 @@
 """Tier 3: End-to-end pipeline flow and handoff validation."""
 import json
 import pytest
-from pathlib import Path
 from tests.synthetic.simulator import HouseholdSimulator
 from tests.synthetic.pipeline import PipelineRunner
 

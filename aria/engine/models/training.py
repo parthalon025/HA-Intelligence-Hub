@@ -66,7 +66,7 @@ def train_all_models(days=90, config=None, store=None):
     results["models"]["anomaly_detector"] = anomaly_result
 
     # Persist anomaly detector status for intelligence module / dashboard
-    intel_dir = os.path.dirname(models_dir)  # intelligence_dir is parent of models/
+    os.path.dirname(models_dir)  # intelligence_dir is parent of models/
     try:
         iso_status = {
             "samples": anomaly_result.get("samples", 0),

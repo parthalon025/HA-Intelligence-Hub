@@ -6,7 +6,6 @@ and safety guardrails.
 """
 
 import asyncio
-import json
 import os
 import sys
 from pathlib import Path
@@ -193,9 +192,9 @@ async def test_orchestrator():
             # Verify tracking
             created_automations = await orchestrator.get_created_automations()
             if automation_id in created_automations:
-                print(f"   ✓ Automation tracked in cache")
+                print("   ✓ Automation tracked in cache")
             else:
-                print(f"   ✗ Automation not tracked in cache")
+                print("   ✗ Automation not tracked in cache")
 
     # Test pattern sensor update
     print("\n9. Testing pattern detection sensor update...")
@@ -210,12 +209,12 @@ async def test_orchestrator():
     print("\n" + "=" * 70)
     print("Test Summary")
     print("=" * 70)
-    print(f"✓ Orchestrator module initialized successfully")
+    print("✓ Orchestrator module initialized successfully")
     print(f"✓ Generated {len(suggestions)} automation suggestions from patterns")
-    print(f"✓ Safety guardrails working (restricted domains detected)")
-    print(f"✓ Suggestion rejection flow working")
-    print(f"✓ Suggestion approval flow tested")
-    print(f"✓ Pattern sensor update tested")
+    print("✓ Safety guardrails working (restricted domains detected)")
+    print("✓ Suggestion rejection flow working")
+    print("✓ Suggestion approval flow tested")
+    print("✓ Pattern sensor update tested")
     print("\nAll tests passed!")
 
     # Cleanup

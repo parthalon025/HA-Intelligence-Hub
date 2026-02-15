@@ -10,7 +10,7 @@ Layer 2 clusters by what entities DO (temporal co-occurrence).
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 
 import numpy as np
 from sklearn.cluster import HDBSCAN

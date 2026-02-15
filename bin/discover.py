@@ -17,7 +17,6 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 from base64 import b64encode
-from hashlib import sha1
 import struct
 import random
 
@@ -95,7 +94,7 @@ def parse_websocket_frame(sock):
     byte1, byte2 = header[0], header[1]
 
     # FIN bit and opcode
-    fin = (byte1 & 0b10000000) >> 7
+    (byte1 & 0b10000000) >> 7
     opcode = byte1 & 0b00001111
 
     # Mask bit and payload length
@@ -289,7 +288,7 @@ def fetch_websocket_data(command_type, retries=3):
                     # Send close frame
                     send_websocket_frame(sock, b'', opcode=0x8)
                     sock.close()
-                except:
+                except Exception:
                     pass
 
     raise Exception(f"Failed to fetch {command_type} after {retries} attempts")
@@ -503,7 +502,7 @@ def discover_all():
         label_registry = fetch_websocket_data("config/label_registry/list")
         log(f"Found {len(label_registry)} labels")
         discovery["labels"] = label_registry
-    except:
+    except Exception:
         log("Labels not available (HA version may not support them)")
         discovery["labels"] = []
 

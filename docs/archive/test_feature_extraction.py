@@ -41,7 +41,7 @@ def test_feature_extraction():
 
     # Test feature config
     config = engine._get_feature_config()
-    print(f"Feature config categories:")
+    print("Feature config categories:")
     for category in ["time_features", "weather_features", "home_features", "lag_features", "interaction_features"]:
         count = sum(1 for v in config.get(category, {}).values() if v)
         print(f"  {category}: {count} enabled")
@@ -56,7 +56,7 @@ def test_feature_extraction():
     # Test time feature computation
     time_features = engine._compute_time_features(snapshot)
     print(f"Computed time features: {len(time_features)} features")
-    print(f"Sample time features:")
+    print("Sample time features:")
     for key in ["hour_sin", "hour_cos", "is_weekend", "is_work_hours", "daylight_remaining_pct"]:
         print(f"  {key}: {time_features.get(key)}")
     print()

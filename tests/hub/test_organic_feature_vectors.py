@@ -5,7 +5,6 @@ suitable for HDBSCAN clustering from HA entity data.
 """
 
 import numpy as np
-import pytest
 
 from aria.modules.organic_discovery.feature_vectors import build_feature_matrix
 
@@ -198,7 +197,7 @@ class TestBuildFeatureMatrix:
             entities, devices, {}, {},
         )
 
-        area_features = [f for f in feature_names if f.startswith("area_")]
+        [f for f in feature_names if f.startswith("area_")]
         assert "area_bedroom" in feature_names
         col = feature_names.index("area_bedroom")
         assert matrix[0, col] == 1.0

@@ -1606,7 +1606,7 @@ class TestConfigStoreIntegration:
 # ============================================================================
 
 
-from aria.modules.shadow_engine import ThompsonSampler
+from aria.modules.shadow_engine import ThompsonSampler  # noqa: E402
 
 
 class TestThompsonSamplerFDSW:

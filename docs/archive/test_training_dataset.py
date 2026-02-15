@@ -71,7 +71,7 @@ def test_training_dataset():
     if len(X) >= 2:
         # Second sample should have prev_snapshot features
         sample_1 = X[1]
-        print(f"Sample 1 (index 1) lag features:")
+        print("Sample 1 (index 1) lag features:")
         for idx in lag_feature_indices:
             print(f"  {feature_names[idx]}: {sample_1[idx]}")
         print()
@@ -79,7 +79,7 @@ def test_training_dataset():
     if len(X) >= 8:
         # Eighth sample should have rolling features
         sample_7 = X[7]
-        print(f"Sample 7 (index 7) lag features:")
+        print("Sample 7 (index 7) lag features:")
         for idx in lag_feature_indices:
             print(f"  {feature_names[idx]}: {sample_7[idx]}")
         print()
@@ -99,7 +99,7 @@ def test_training_dataset():
         return False
 
     # Check target values
-    print(f"Target values (power_watts):")
+    print("Target values (power_watts):")
     print(f"  Min: {y.min():.2f}")
     print(f"  Max: {y.max():.2f}")
     print(f"  Mean: {y.mean():.2f}")
@@ -108,7 +108,7 @@ def test_training_dataset():
 
     print("✓ Training dataset build successful!")
     print(f"✓ Extracted {len(X)} samples with {len(feature_names)} features each")
-    print(f"✓ Lag features populated correctly")
+    print("✓ Lag features populated correctly")
 
     return True
 

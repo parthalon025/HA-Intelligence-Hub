@@ -1,6 +1,5 @@
 """Tests for organic discovery usefulness scoring."""
 
-import pytest
 
 from aria.modules.organic_discovery.scoring import (
     UsefulnessComponents,

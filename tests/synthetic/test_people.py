@@ -1,5 +1,4 @@
 """Tests for household person simulation."""
-import pytest
 from tests.synthetic.people import Person, Schedule
 
 

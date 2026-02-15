@@ -1,7 +1,6 @@
 """Tests for the OrganicDiscoveryModule hub integration."""
 
 import pytest
-from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from aria.modules.organic_discovery.module import (
@@ -181,7 +180,7 @@ class TestRunDiscovery:
             ),
         ):
             await module.initialize()
-            result = await module.run_discovery()
+            await module.run_discovery()
 
         # Should have called set_cache for capabilities
         cap_calls = [
@@ -206,7 +205,7 @@ class TestRunDiscovery:
         }.get(key)
 
         await module.initialize()
-        result = await module.run_discovery()
+        await module.run_discovery()
 
         cap_calls = [
             c for c in mock_hub.set_cache.call_args_list
@@ -359,7 +358,7 @@ class TestAutonomyModes:
             "aria.modules.organic_discovery.module.heuristic_name",
             return_value=cap_name,
         ):
-            result = await module.run_discovery()
+            await module.run_discovery()
 
         cap_calls = [
             c for c in mock_hub.set_cache.call_args_list
@@ -405,7 +404,7 @@ class TestAutonomyModes:
             "aria.modules.organic_discovery.module.compute_usefulness",
             return_value=35,  # above 30 autonomous threshold
         ):
-            result = await module.run_discovery()
+            await module.run_discovery()
 
         cap_calls = [
             c for c in mock_hub.set_cache.call_args_list
@@ -454,7 +453,7 @@ class TestBehavioralDiscovery:
             ),
         ), patch.object(module, '_load_logbook', return_value=mock_logbook):
             await module.initialize()
-            result = await module.run_discovery()
+            await module.run_discovery()
 
         # Should have written capabilities to cache
         cap_calls = [
@@ -519,7 +518,7 @@ class TestBehavioralDiscovery:
                 "temporal_pattern": {"peak_hours": [19], "weekday_bias": 0.7},
             }],
         ), patch.object(module, '_load_logbook', return_value=mock_logbook):
-            result = await module.run_discovery()
+            await module.run_discovery()
 
         cap_calls = [
             c for c in mock_hub.set_cache.call_args_list

@@ -1,6 +1,4 @@
 """Tests for aria demo mode CLI integration."""
-import pytest
-from pathlib import Path
 from tests.demo.generate import generate_checkpoint
 
 

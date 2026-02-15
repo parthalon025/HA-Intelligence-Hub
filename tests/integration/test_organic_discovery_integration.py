@@ -4,12 +4,11 @@ Exercises the full OrganicDiscoveryModule with a real IntelligenceHub, real
 SQLite cache, real HDBSCAN clustering, and realistic synthetic entity data.
 """
 
-import asyncio
 import os
 import shutil
 import tempfile
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -337,7 +336,7 @@ async def test_pipeline_with_behavioral_data(
 
         module = OrganicDiscoveryModule(hub)
         module._load_logbook = AsyncMock(return_value=logbook_entries)
-        result = await module.run_discovery()
+        await module.run_discovery()
 
         # Get capabilities
         caps_entry = await hub.get_cache("capabilities")
@@ -388,7 +387,7 @@ async def test_autonomy_modes_integration(
         module.settings["promote_streak_days"] = 0
 
         # Seed history so stability_streak >= 0 (which matches promote_streak_days=0)
-        result = await module.run_discovery()
+        await module.run_discovery()
 
         caps_entry = await hub.get_cache("capabilities")
         caps = caps_entry["data"]

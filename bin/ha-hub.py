@@ -2,5 +2,5 @@
 """Legacy entry point — use 'aria serve' instead."""
 import sys
 sys.argv = ["aria", "serve"]
-from aria.cli import main
+from aria.cli import main  # noqa: E402
 main()

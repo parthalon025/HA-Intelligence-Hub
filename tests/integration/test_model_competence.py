@@ -1,5 +1,4 @@
 """Tier 1: ML model competence tests against realistic synthetic data."""
-import pytest
 from tests.synthetic.simulator import HouseholdSimulator
 from tests.synthetic.pipeline import PipelineRunner
 

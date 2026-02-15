@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as dt
 import numpy as np
-import pytest
 
 from aria.modules.organic_discovery.behavioral import (
     build_cooccurrence_matrix,

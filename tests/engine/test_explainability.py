@@ -3,7 +3,7 @@
 import pytest
 
 try:
-    import shap
+    import shap  # noqa: F401
 
     HAS_SHAP = True
 except ImportError:

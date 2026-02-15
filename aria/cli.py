@@ -340,9 +340,9 @@ def _demo(args):
         print(f"  Predictions: {len(result.get('predictions', {}))}")
 
     print(f"\nDemo data directory: {data_dir}")
-    print(f"\nTo start the hub with this data, point intelligence_dir at:")
+    print("\nTo start the hub with this data, point intelligence_dir at:")
     print(f"  {data_dir}")
-    print(f"\nContents:")
+    print("\nContents:")
     for child in sorted(data_dir.iterdir()):
         if child.is_dir():
             count = len(list(child.iterdir()))

@@ -1,5 +1,4 @@
 """Tests for device roster and entity state generation."""
-import pytest
 from tests.synthetic.entities import Device, DeviceRoster, EntityStateGenerator
 from tests.synthetic.people import Person, Schedule
 
