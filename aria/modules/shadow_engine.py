@@ -246,6 +246,12 @@ class ShadowEngine(Module):
         # Thompson Sampling for explore/exploit
         self._thompson = ThompsonSampler()
 
+        # Recently resolved predictions for feedback computation
+        self._recent_resolved: List[Dict[str, Any]] = []
+
+        # Counter for resolution loop iterations (feedback every 10th)
+        self._resolution_iteration_count: int = 0
+
     def get_thompson_stats(self) -> Dict[str, Any]:
         """Return Thompson Sampling bucket statistics for observability."""
         return self._thompson.get_stats()
@@ -917,6 +923,14 @@ class ShadowEngine(Module):
                 )
                 await asyncio.sleep(interval)
                 await self._resolve_expired_predictions()
+
+                # Write feedback to capabilities every 10th iteration (~10 min)
+                self._resolution_iteration_count += 1
+                if self._resolution_iteration_count % 10 == 0:
+                    try:
+                        await self._write_feedback_to_capabilities()
+                    except Exception as e:
+                        self.logger.error(f"Failed to write feedback to capabilities: {e}")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -952,6 +966,14 @@ class ShadowEngine(Module):
                 context = prediction.get("context", {})
                 if context:
                     self._thompson.record_outcome(context, success=(outcome == "correct"))
+
+                # Track resolved prediction for feedback computation
+                self._recent_resolved.append({
+                    "id": pred_id,
+                    "predictions": prediction.get("predictions", []),
+                    "outcome": outcome,
+                    "actual": actual_data,
+                })
 
                 self.logger.debug(f"Resolved {pred_id[:8]}: {outcome} ({len(actual_events)} events in window)")
             except Exception as e:
@@ -1039,6 +1061,112 @@ class ShadowEngine(Module):
             return "correct", actual_data
         else:
             return "disagreement", actual_data
+
+    def _get_capability_hit_rates(self) -> Dict[str, Dict[str, int]]:
+        """Compute per-capability hit rates from recently resolved predictions.
+
+        Reads capabilities from cache (synchronously via _recent_resolved data)
+        and tallies hits/total for each capability based on entity overlap
+        between predictions and capability entity lists.
+
+        Returns:
+            Dict mapping capability name to {"hits": int, "total": int}.
+        """
+        if not self._recent_resolved:
+            return {}
+
+        if not hasattr(self, "_cached_cap_entities"):
+            return {}
+
+        cap_entities = self._cached_cap_entities
+        hit_rates: Dict[str, Dict[str, int]] = {}
+
+        for resolved in self._recent_resolved:
+            outcome = resolved.get("outcome", "")
+            is_correct = outcome == "correct"
+            predictions = resolved.get("predictions", [])
+            actual = resolved.get("actual", {}) or {}
+
+            # Collect all entity-relevant domains from predictions and actuals
+            pred_domains = set()
+            for pred in predictions:
+                predicted = pred.get("predicted", "")
+                pred_type = pred.get("type", "")
+                if pred_type == "next_domain_action":
+                    pred_domains.add(predicted)
+                elif pred_type == "routine_trigger":
+                    pred_domains.update(pred.get("expected_domains", []))
+
+            actual_domains = set(actual.get("domains", []))
+            involved_domains = pred_domains | actual_domains
+
+            # Match against each capability's entities
+            for cap_name, entities in cap_entities.items():
+                cap_domains = {e.split(".")[0] for e in entities if "." in e}
+                if cap_domains & involved_domains:
+                    if cap_name not in hit_rates:
+                        hit_rates[cap_name] = {"hits": 0, "total": 0}
+                    hit_rates[cap_name]["total"] += 1
+                    if is_correct:
+                        hit_rates[cap_name]["hits"] += 1
+
+        return hit_rates
+
+    async def _write_feedback_to_capabilities(self) -> None:
+        """Write per-capability hit rates back to the capabilities cache.
+
+        Reads the capabilities cache, computes hit rates from recently
+        resolved predictions, and writes shadow_accuracy metadata onto
+        each capability that has prediction data. Then clears the
+        recent_resolved buffer.
+        """
+        caps_cache = await self.hub.get_cache("capabilities")
+        if not caps_cache or not caps_cache.get("data"):
+            return
+
+        caps_data = caps_cache["data"]
+
+        # Build entity lists per capability for hit rate computation
+        cap_entities: Dict[str, list] = {}
+        for cap_name, cap in caps_data.items():
+            if isinstance(cap, dict):
+                entities = cap.get("entities", [])
+                if entities:
+                    cap_entities[cap_name] = entities
+
+        if not cap_entities:
+            return
+
+        # Store for synchronous access by _get_capability_hit_rates
+        self._cached_cap_entities = cap_entities
+
+        hit_rates = self._get_capability_hit_rates()
+        if not hit_rates:
+            return
+
+        now = datetime.now().isoformat()
+        updated = False
+
+        for cap_name, rates in hit_rates.items():
+            if cap_name in caps_data and isinstance(caps_data[cap_name], dict):
+                total = rates["total"]
+                hits = rates["hits"]
+                hit_rate = hits / total if total > 0 else 0.0
+                caps_data[cap_name]["shadow_accuracy"] = {
+                    "hit_rate": round(hit_rate, 4),
+                    "total_predictions": total,
+                    "last_updated": now,
+                }
+                updated = True
+
+        if updated:
+            await self.hub.set_cache("capabilities", caps_data, {"source": "shadow_feedback"})
+            self.logger.debug(
+                f"Wrote shadow feedback for {len(hit_rates)} capabilities"
+            )
+
+        # Clear resolved buffer after writing feedback
+        self._recent_resolved.clear()
 
     def _cleanup_stale_windows(self):
         """Remove window_events entries for predictions that are no longer pending.

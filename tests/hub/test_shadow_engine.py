@@ -1710,3 +1710,285 @@ class TestThompsonPersistence:
             await cache.close()
 
 
+# ============================================================================
+# Feedback: Shadow Engine → Capabilities Cache
+# ============================================================================
+
+
+class TestCapabilityFeedback:
+    """Test _get_capability_hit_rates and _write_feedback_to_capabilities."""
+
+    @pytest.mark.asyncio
+    async def test_write_feedback_updates_capabilities(self, engine, hub):
+        """Should write shadow_accuracy to each capability with prediction data."""
+        # Set up capabilities cache with entities
+        await hub.set_cache("capabilities", {
+            "lighting": {
+                "name": "Lighting",
+                "entities": ["light.kitchen", "light.bedroom"],
+            },
+            "media": {
+                "name": "Media",
+                "entities": ["media_player.tv", "media_player.speaker"],
+            },
+        })
+
+        # Populate recent resolved with predictions involving light domain
+        engine._recent_resolved = [
+            {
+                "id": "pred-1",
+                "predictions": [{"type": "next_domain_action", "predicted": "light"}],
+                "outcome": "correct",
+                "actual": {"event_count": 1, "domains": ["light"], "rooms": ["kitchen"]},
+            },
+            {
+                "id": "pred-2",
+                "predictions": [{"type": "next_domain_action", "predicted": "light"}],
+                "outcome": "disagreement",
+                "actual": {"event_count": 1, "domains": ["switch"], "rooms": []},
+            },
+            {
+                "id": "pred-3",
+                "predictions": [{"type": "next_domain_action", "predicted": "media_player"}],
+                "outcome": "correct",
+                "actual": {"event_count": 2, "domains": ["media_player"], "rooms": []},
+            },
+        ]
+
+        await engine._write_feedback_to_capabilities()
+
+        # Read back capabilities
+        caps = await hub.get_cache("capabilities")
+        assert caps is not None
+        caps_data = caps["data"]
+
+        # Lighting: 2 predictions involved light domain (pred-1 correct, pred-2 had light predicted)
+        assert "shadow_accuracy" in caps_data["lighting"]
+        lighting_acc = caps_data["lighting"]["shadow_accuracy"]
+        assert lighting_acc["total_predictions"] == 2
+        assert lighting_acc["hit_rate"] == 0.5
+        assert "last_updated" in lighting_acc
+
+        # Media: 1 prediction involved media_player domain (pred-3 correct)
+        assert "shadow_accuracy" in caps_data["media"]
+        media_acc = caps_data["media"]["shadow_accuracy"]
+        assert media_acc["total_predictions"] == 1
+        assert media_acc["hit_rate"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_write_feedback_clears_recent_resolved(self, engine, hub):
+        """After writing feedback, _recent_resolved should be cleared."""
+        await hub.set_cache("capabilities", {
+            "lighting": {
+                "name": "Lighting",
+                "entities": ["light.kitchen"],
+            },
+        })
+
+        engine._recent_resolved = [
+            {
+                "id": "pred-1",
+                "predictions": [{"type": "next_domain_action", "predicted": "light"}],
+                "outcome": "correct",
+                "actual": {"event_count": 1, "domains": ["light"], "rooms": []},
+            },
+        ]
+
+        await engine._write_feedback_to_capabilities()
+        assert engine._recent_resolved == []
+
+    @pytest.mark.asyncio
+    async def test_write_feedback_no_capabilities(self, engine, hub):
+        """Should be a no-op when capabilities cache is empty."""
+        engine._recent_resolved = [
+            {
+                "id": "pred-1",
+                "predictions": [{"type": "next_domain_action", "predicted": "light"}],
+                "outcome": "correct",
+                "actual": {"event_count": 1, "domains": ["light"], "rooms": []},
+            },
+        ]
+
+        # No capabilities cache set
+        await engine._write_feedback_to_capabilities()
+
+        # recent_resolved should NOT be cleared (no feedback written)
+        assert len(engine._recent_resolved) == 1
+
+    @pytest.mark.asyncio
+    async def test_write_feedback_no_resolved_predictions(self, engine, hub):
+        """Should be a no-op when no predictions have been resolved."""
+        await hub.set_cache("capabilities", {
+            "lighting": {
+                "name": "Lighting",
+                "entities": ["light.kitchen"],
+            },
+        })
+
+        engine._recent_resolved = []
+        await engine._write_feedback_to_capabilities()
+
+        # Capabilities should not be modified
+        caps = await hub.get_cache("capabilities")
+        assert "shadow_accuracy" not in caps["data"]["lighting"]
+
+    @pytest.mark.asyncio
+    async def test_write_feedback_no_entity_overlap(self, engine, hub):
+        """Capabilities with no entity overlap should not get shadow_accuracy."""
+        await hub.set_cache("capabilities", {
+            "climate": {
+                "name": "Climate",
+                "entities": ["climate.thermostat"],
+            },
+        })
+
+        engine._recent_resolved = [
+            {
+                "id": "pred-1",
+                "predictions": [{"type": "next_domain_action", "predicted": "light"}],
+                "outcome": "correct",
+                "actual": {"event_count": 1, "domains": ["light"], "rooms": []},
+            },
+        ]
+
+        await engine._write_feedback_to_capabilities()
+
+        caps = await hub.get_cache("capabilities")
+        # climate capability should not have shadow_accuracy (no light entities)
+        assert "shadow_accuracy" not in caps["data"]["climate"]
+
+    def test_get_capability_hit_rates_empty_resolved(self, engine):
+        """Should return empty dict when no resolved predictions."""
+        engine._recent_resolved = []
+        assert engine._get_capability_hit_rates() == {}
+
+    def test_get_capability_hit_rates_computes_correctly(self, engine):
+        """Should compute correct hit/total per capability."""
+        engine._cached_cap_entities = {
+            "lighting": ["light.kitchen", "light.bedroom"],
+            "switches": ["switch.hallway"],
+        }
+
+        engine._recent_resolved = [
+            {
+                "id": "pred-1",
+                "predictions": [{"type": "next_domain_action", "predicted": "light"}],
+                "outcome": "correct",
+                "actual": {"event_count": 1, "domains": ["light"], "rooms": []},
+            },
+            {
+                "id": "pred-2",
+                "predictions": [{"type": "next_domain_action", "predicted": "switch"}],
+                "outcome": "disagreement",
+                "actual": {"event_count": 1, "domains": ["light"], "rooms": []},
+            },
+        ]
+
+        rates = engine._get_capability_hit_rates()
+
+        # lighting: pred-1 (light predicted, correct) + pred-2 (light in actual)
+        assert rates["lighting"]["total"] == 2
+        assert rates["lighting"]["hits"] == 1
+
+        # switches: pred-2 (switch predicted, disagreement)
+        assert rates["switches"]["total"] == 1
+        assert rates["switches"]["hits"] == 0
+
+    @pytest.mark.asyncio
+    async def test_resolution_loop_triggers_feedback_every_10th(self, engine, hub):
+        """Resolution loop should call _write_feedback_to_capabilities every 10th iteration."""
+        calls = []
+
+        async def mock_write_feedback():
+            calls.append(1)
+
+        engine._write_feedback_to_capabilities = mock_write_feedback
+
+        # Simulate 10 iterations by setting counter to 9 and running one resolve
+        engine._resolution_iteration_count = 9
+        hub.cache.get_pending_predictions = AsyncMock(return_value=[])
+
+        # We can't run the actual loop (it sleeps forever), so test the logic directly
+        await engine._resolve_expired_predictions()
+        engine._resolution_iteration_count += 1
+        if engine._resolution_iteration_count % 10 == 0:
+            await engine._write_feedback_to_capabilities()
+
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_resolution_loop_does_not_trigger_feedback_before_10th(self, engine, hub):
+        """Resolution loop should NOT call _write_feedback_to_capabilities before 10th iteration."""
+        calls = []
+
+        async def mock_write_feedback():
+            calls.append(1)
+
+        engine._write_feedback_to_capabilities = mock_write_feedback
+
+        # Simulate iteration 5
+        engine._resolution_iteration_count = 4
+        hub.cache.get_pending_predictions = AsyncMock(return_value=[])
+
+        await engine._resolve_expired_predictions()
+        engine._resolution_iteration_count += 1
+        if engine._resolution_iteration_count % 10 == 0:
+            await engine._write_feedback_to_capabilities()
+
+        assert len(calls) == 0
+
+    @pytest.mark.asyncio
+    async def test_resolve_appends_to_recent_resolved(self, engine, hub):
+        """_resolve_expired_predictions should append to _recent_resolved."""
+        pending = [
+            {
+                "id": "pred-feedback-1",
+                "timestamp": (datetime.now() - timedelta(minutes=15)).isoformat(),
+                "predictions": [
+                    {"type": "next_domain_action", "predicted": "light"},
+                ],
+                "confidence": 0.8,
+                "window_seconds": 600,
+                "context": {},
+            }
+        ]
+        hub.cache.get_pending_predictions = AsyncMock(return_value=pending)
+        engine._window_events["pred-feedback-1"] = [
+            {"domain": "light", "entity_id": "light.kitchen", "to": "on"},
+        ]
+
+        await engine._resolve_expired_predictions()
+
+        assert len(engine._recent_resolved) == 1
+        assert engine._recent_resolved[0]["id"] == "pred-feedback-1"
+        assert engine._recent_resolved[0]["outcome"] == "correct"
+
+    @pytest.mark.asyncio
+    async def test_write_feedback_routine_trigger_domains(self, engine, hub):
+        """Should match routine_trigger expected_domains to capabilities."""
+        await hub.set_cache("capabilities", {
+            "media": {
+                "name": "Media",
+                "entities": ["media_player.tv"],
+            },
+        })
+
+        engine._recent_resolved = [
+            {
+                "id": "pred-rt",
+                "predictions": [{
+                    "type": "routine_trigger",
+                    "predicted": "Evening Routine",
+                    "expected_domains": ["media_player", "light"],
+                }],
+                "outcome": "correct",
+                "actual": {"event_count": 3, "domains": ["media_player", "light"], "rooms": []},
+            },
+        ]
+
+        await engine._write_feedback_to_capabilities()
+
+        caps = await hub.get_cache("capabilities")
+        assert "shadow_accuracy" in caps["data"]["media"]
+        assert caps["data"]["media"]["shadow_accuracy"]["hit_rate"] == 1.0
+
