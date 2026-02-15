@@ -2,6 +2,8 @@
 
 Unified intelligence platform for Home Assistant — batch ML engine, real-time activity monitoring, predictive analytics, and an interactive Preact dashboard in a single `aria.*` package.
 
+**Repo:** https://github.com/parthalon025/ha-aria (private)
+
 ## Context
 
 **Unified from:** `ha-intelligence` (batch ML engine) + `ha-intelligence-hub` (real-time dashboard), now in one repo.
