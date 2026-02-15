@@ -206,11 +206,13 @@ See: `~/Documents/docs/lessons/2026-02-15-horizontal-vertical-pipeline-testing.m
 
 ### Unit Tests
 
-```bash
-# All tests (~984)
-.venv/bin/python -m pytest tests/ -v
+**Memory warning:** The full suite (~984 tests) can consume 4-8G RAM. If concurrent agents or services are running, check `free -h` first. If available memory < 4G, run by suite instead of the full set. Shadow engine tests previously consumed 17G+ RAM due to mock objects returning None in tight loops — those are fixed, but watch for regressions.
 
-# By suite
+```bash
+# All tests (~984) — use timeout to catch hangs
+.venv/bin/python -m pytest tests/ -v --timeout=120
+
+# By suite (safer when memory-constrained)
 .venv/bin/python -m pytest tests/hub/ -v         # Hub (~670 tests)
 .venv/bin/python -m pytest tests/engine/ -v       # Engine (222 tests)
 .venv/bin/python -m pytest tests/integration/ -v  # Integration (39 tests)
