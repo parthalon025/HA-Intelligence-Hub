@@ -171,7 +171,12 @@ class TestInitialization:
         """initialize() logs error but doesn't crash if suggestion generation fails."""
         # No patterns cache at all — will hit the "No patterns found" branch
         await module.initialize()
-        # Should not raise
+
+        # Initialization succeeded despite missing patterns — session was created
+        assert module._session is not None
+        # Scheduled task was still registered
+        assert len(hub._scheduled_tasks) == 1
+
         await module.shutdown()
 
     @pytest.mark.asyncio
@@ -642,6 +647,7 @@ class TestEventHandling:
     @pytest.mark.asyncio
     async def test_event_handler_error_does_not_crash(self, module, hub):
         """Errors during event-driven regeneration are caught."""
+        # Intentionally no assertion — verifies error resilience (no crash on missing data)
         # No patterns cache → generate_suggestions returns [] but doesn't crash
         await module.on_event("cache_updated", {"category": "patterns"})
 
@@ -846,6 +852,7 @@ class TestPatternSensor:
     @pytest.mark.asyncio
     async def test_sensor_update_failure_does_not_crash(self, module):
         """Sensor update failure is logged but doesn't raise."""
+        # Intentionally no assertion — verifies error resilience (network failure doesn't propagate)
         mock_session = MagicMock()
         mock_session.post = MagicMock(side_effect=Exception("Network error"))
         module._session = mock_session

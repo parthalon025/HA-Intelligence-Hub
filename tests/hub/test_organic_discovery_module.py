@@ -193,6 +193,10 @@ class TestRunDiscovery:
         written_caps = cap_calls[-1][0][1]
         assert "lighting" in written_caps
 
+        # Verify capabilities were actually written with expected structure
+        assert isinstance(written_caps, dict)
+        assert written_caps["lighting"]["available"] is True
+
     async def test_seed_capabilities_preserved_with_empty_entities(self, mock_hub, module):
         """Seeds should be preserved even when no entities are found."""
         mock_hub.get_cache.side_effect = lambda key: {
@@ -309,6 +313,10 @@ class TestAutonomyModes:
         organic_caps = {
             k: v for k, v in written_caps.items() if v.get("source") == "organic"
         }
+        # In suggest_and_wait mode, no organic capabilities should be promoted
+        assert len(organic_caps) > 0, "Expected at least one organic capability"
+        promoted = [c for c in organic_caps.values() if c["status"] == "promoted"]
+        assert len(promoted) == 0, "suggest_and_wait should never promote organic capabilities"
         for cap in organic_caps.values():
             assert cap["status"] == "candidate"
 
@@ -368,9 +376,14 @@ class TestAutonomyModes:
         organic_caps = {
             k: v for k, v in written_caps.items() if v.get("source") == "organic"
         }
-        # At least one should be promoted
+        # At least one should be promoted at threshold
         promoted = [c for c in organic_caps.values() if c["status"] == "promoted"]
-        assert len(promoted) >= 1
+        assert len(promoted) >= 1, (
+            "auto_promote mode should promote capabilities above threshold with sufficient streak"
+        )
+        # Promoted capabilities should have the expected source
+        for cap in promoted:
+            assert cap["source"] == "organic"
 
     async def test_autonomous_promotes_at_lower_threshold(self, mock_hub, module):
         """In autonomous mode, promote at >= 30."""
@@ -415,7 +428,12 @@ class TestAutonomyModes:
             k: v for k, v in written_caps.items() if v.get("source") == "organic"
         }
         promoted = [c for c in organic_caps.values() if c["status"] == "promoted"]
-        assert len(promoted) >= 1
+        assert len(promoted) >= 1, (
+            "autonomous mode should promote at lower threshold (>=30)"
+        )
+        # Verify promotion happened despite the configured threshold being 50
+        for cap in promoted:
+            assert cap["source"] == "organic"
 
 
 # ---------------------------------------------------------------------------
@@ -461,6 +479,12 @@ class TestBehavioralDiscovery:
             if c[0][0] == "capabilities"
         ]
         assert len(cap_calls) >= 1
+
+        # Verify behavioral capabilities were discovered from the logbook data
+        written_caps = cap_calls[-1][0][1]
+        assert isinstance(written_caps, dict)
+        # Seed capabilities should be preserved alongside any behavioral discoveries
+        assert "lighting" in written_caps
 
     async def test_behavioral_skipped_when_no_logbook(self, mock_hub, module):
         """When logbook returns empty, behavioral layer should be a no-op."""
@@ -529,10 +553,12 @@ class TestBehavioralDiscovery:
             k: v for k, v in written_caps.items()
             if v.get("layer") == "behavioral"
         }
-        assert len(behavioral_caps) >= 1
-        for cap in behavioral_caps.values():
-            assert "temporal_pattern" in cap
-            assert cap["source"] == "organic"
+        # Behavioral capabilities must exist and have layer="behavioral"
+        assert len(behavioral_caps) >= 1, "Expected at least one behavioral capability"
+        for name, cap in behavioral_caps.items():
+            assert cap["layer"] == "behavioral", f"{name} should have layer='behavioral'"
+            assert "temporal_pattern" in cap, f"{name} missing temporal_pattern"
+            assert cap["source"] == "organic", f"{name} should have source='organic'"
 
 
 # ---------------------------------------------------------------------------
@@ -543,4 +569,5 @@ class TestBehavioralDiscovery:
 class TestOnEvent:
     async def test_on_event_noop(self, module):
         """on_event should not raise."""
+        # Intentionally no assertion — verifies on_event doesn't raise
         await module.on_event("cache_updated", {"category": "entities"})

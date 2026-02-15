@@ -300,7 +300,10 @@ async def test_strip_think_tags():
 @pytest.mark.asyncio
 async def test_on_event_handler(hub, patterns_module):
     """Test that module responds to hub events."""
-    # Module should not crash on events
+    # Module should handle events without crashing
     await patterns_module.on_event("test_event", {"data": "test"})
     await patterns_module.on_event("cache_updated", {"category": "test"})
-    # No assertion needed - just verify no exceptions
+
+    # Verify module is still functional after handling events
+    assert patterns_module.module_id == "pattern_recognition"
+    assert "pattern_recognition" in hub.modules
