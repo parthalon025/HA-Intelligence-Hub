@@ -18,6 +18,15 @@ VALID_PIPELINE_STAGES = frozenset({"backtest", "shadow", "suggest", "autonomous"
 
 
 @dataclass(frozen=True)
+class DemandSignal:
+    """Declares what entity groupings a module needs from discovery."""
+    entity_domains: List[str] = field(default_factory=list)
+    device_classes: List[str] = field(default_factory=list)
+    min_entities: int = 5
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class Capability:
     """Declares a single ARIA capability.
 
@@ -36,6 +45,7 @@ class Capability:
     runtime_deps: List[str] = field(default_factory=list)
     optional_deps: List[str] = field(default_factory=list)
     data_paths: List[str] = field(default_factory=list)
+    demand_signals: List[DemandSignal] = field(default_factory=list)
     systemd_units: List[str] = field(default_factory=list)
     pipeline_stage: Optional[str] = None
     status: str = "stable"

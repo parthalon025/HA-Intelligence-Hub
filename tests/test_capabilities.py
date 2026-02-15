@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from aria.capabilities import Capability, CapabilityRegistry
+from aria.capabilities import Capability, CapabilityRegistry, DemandSignal
 
 PROJECT_ROOT = str(Path(__file__).parent.parent)
 
@@ -72,6 +72,48 @@ class TestCapabilityCreation:
     def test_with_depends_on(self):
         cap = _make_cap(depends_on=["discovery", "ml_engine"])
         assert cap.depends_on == ["discovery", "ml_engine"]
+
+
+class TestDemandSignal:
+    """Tests for DemandSignal dataclass and its integration with Capability."""
+
+    def test_demand_signal_defaults(self):
+        sig = DemandSignal()
+        assert sig.entity_domains == []
+        assert sig.device_classes == []
+        assert sig.min_entities == 5
+        assert sig.description == ""
+
+    def test_demand_signal_custom_fields(self):
+        sig = DemandSignal(
+            entity_domains=["light", "switch"],
+            device_classes=["occupancy"],
+            min_entities=10,
+            description="Lighting groups for zone control",
+        )
+        assert sig.entity_domains == ["light", "switch"]
+        assert sig.device_classes == ["occupancy"]
+        assert sig.min_entities == 10
+        assert sig.description == "Lighting groups for zone control"
+
+    def test_demand_signal_frozen(self):
+        sig = DemandSignal()
+        with pytest.raises(AttributeError):
+            sig.min_entities = 10
+
+    def test_capability_with_demand_signals(self):
+        signals = [
+            DemandSignal(entity_domains=["light"], min_entities=10),
+            DemandSignal(entity_domains=["climate"], device_classes=["thermostat"]),
+        ]
+        cap = _make_cap(demand_signals=signals)
+        assert len(cap.demand_signals) == 2
+        assert cap.demand_signals[0].entity_domains == ["light"]
+        assert cap.demand_signals[1].device_classes == ["thermostat"]
+
+    def test_capability_without_demand_signals_defaults_empty(self):
+        cap = _make_cap()
+        assert cap.demand_signals == []
 
 
 class TestCapabilityValidation:
